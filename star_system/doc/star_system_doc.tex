@@ -1,0 +1,66 @@
+\documentclass[11pt,a4paper]{article}
+
+
+%============================================================================================
+% Language
+%============================================================================================
+\usepackage[utf8]{inputenc}
+
+%============================================================================================
+% Page setup
+%============================================================================================
+\usepackage{fullpage}
+\usepackage[affil-it]{authblk}
+
+
+%============================================================================================
+% Symbols
+%============================================================================================
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+
+%============================================================================================
+% User defined cmds
+%============================================================================================
+\title{Solving the ``star system'' problem using Voronoi tessellation}
+\author{}
+
+\begin{document}
+
+% \bibliographystyle{apalike}
+% \maketitle
+
+\subsubsection*{Interpretation of the problem} 
+
+In the following, we consider the star system as a collection of 2D points $\mathcal{P} = \{P_i\}_{i=0}^{n-1}$. Assuming that we can build an adjacency relation between points, we can define paths between two points $P_i,~P_j \in \mathcal{P}$ as a succession of displacements within the adjacency graph. With this definition, the lowest distance $d$ that makes the star system fully explorable is the maximal distance between two adjacent points.
+
+\subsubsection*{Voronoi diagram}
+
+The problem boils down to defining a suitable adjacency relation between points and we propose to use, in the following, the Voronoi diagram associated to the set of points. The Voronoi diagram is the nearest-neighbor map of a set of points, in the sense that each region or cell contains the points that are nearer one input point than any other input point. More precisely, if we denote by $\mathcal{V} = \{V_i\}_{i=0}^{n-1}$ the Voronoi diagram made of $n$ cells defined as
+\[
+	V_i = \big\{ P \in \mathbb{R}^2,\quad \forall j \neq i,\quad  ||P_i - P|| \leq ||P_j - P|| \big\}.
+\]
+
+\subsubsection*{Sufficient and necessary conditions}
+
+From the Voronoi diagram we can consider adjacency relations, thus compute the maximal distance between two adjacent points. We can also verify that this distance is the solution of our initial problem.
+
+\begin{itemize}
+	\item Using a simple counter-example, we can check that if $d$ is lower than the maximal distance between two adjacent points, then we can find situations where two adjacent points cannot be linked together. Hence, $d$ greater or equal to the maximal distance between two adjacent points appears to be a necessary condition,
+	\item Since the Voronoi diagram pave the whole $\mathbb{R}^2$ plane, any point is reachable using cell by cell displacement steps. Therefore, $d$ equal to the maximal distance between is a sufficient condition.
+\end{itemize}
+
+\subsubsection*{Complexity considerations}
+
+
+
+
+
+
+
+% \bibliography{star_system_doc}
+
+\end{document}
+
+
