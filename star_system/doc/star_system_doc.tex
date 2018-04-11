@@ -28,38 +28,32 @@
 
 \begin{document}
 
-% \bibliographystyle{apalike}
+\bibliographystyle{apalike}
 % \maketitle
 
-\subsubsection*{Interpretation of the problem} 
-
-In the following, we consider the star system as a collection of 2D points $\mathcal{P} = \{P_i\}_{i=0}^{n-1}$. Assuming that we can build an adjacency relation between points, we can define paths between two points $P_i,~P_j \in \mathcal{P}$ as a succession of displacements within the adjacency graph. With this definition, the lowest distance $d$ that makes the star system fully explorable is the maximal distance between two adjacent points.
-
-\subsubsection*{Voronoi diagram}
-
-The problem boils down to defining a suitable adjacency relation between points and we propose to use, in the following, the Voronoi diagram associated to the set of points. The Voronoi diagram is the nearest-neighbor map of a set of points, in the sense that each region or cell contains the points that are nearer one input point than any other input point. More precisely, if we denote by $\mathcal{V} = \{V_i\}_{i=0}^{n-1}$ the Voronoi diagram made of $n$ cells defined as
-\[
-	V_i = \big\{ P \in \mathbb{R}^2,\quad \forall j \neq i,\quad  ||P_i - P|| \leq ||P_j - P|| \big\}.
-\]
-
-\subsubsection*{Sufficient and necessary conditions}
-
-From the Voronoi diagram we can consider adjacency relations, thus compute the maximal distance between two adjacent points. We can also verify that this distance is the solution of our initial problem.
+\subsubsection*{Problem analysis}
 
 \begin{itemize}
-	\item Using a simple counter-example, we can check that if $d$ is lower than the maximal distance between two adjacent points, then we can find situations where two adjacent points cannot be linked together. Hence, $d$ greater or equal to the maximal distance between two adjacent points appears to be a necessary condition,
-	\item Since the Voronoi diagram pave the whole $\mathbb{R}^2$ plane, any point is reachable using cell by cell displacement steps. Therefore, $d$ equal to the maximal distance between is a sufficient condition.
+\item  We consider the star system as a collection of 2D points $\mathcal{P} = \{P_i\}_{i=0}^{n-1}$. Assuming that we can build an adjacency relation between points, a path between two points $P_i,~P_j \in \mathcal{P}$ is obtained as a succession of displacements within the adjacency graph. With this assumption, we seek $d$ the minimal distance allowing to browse every paths between two points in the point set. \\
+\item The first task is then to propose a suitable adjacency relation between points and we propose to use in the following the Voronoi diagram associated to the set of points. The Voronoi diagram benefits from numerous fundamental properties --~see for instance \cite{aurenhammer1991voronoi}, \cite{o1998computational}~-- and connecting every adjacent points in this diagram leads to the so-called Delaunay triangulation. \\
+\item From the Delaunay triangulation, a potential solution would be to define the sought minimal distance as the maximal edge length in the triangulation. While this would give a sufficient condition to browse the adjacency graph, it would not be optimal. To illustrate this, we can consider the most simple counter-example of three points $\mathcal{P}~=~\{(0, 0),~(1, 0), ~(0, 1)\}$, leading to one triangle with maximal edge length of $\sqrt{2}$, while the optimal solution clearly is $d=1$.\\
+\item Therefore, we face the problem of finding a subgraph of the Delaunay edges graph which is necessarily: (1) spanning, since we need to be able to reach any point within the point set; (2) made of edges with minimal length. \\
+\item In order to build this subgraph, we can resort to an incremental approach. We first sort every edges by length, and add them into the subgraph under construction. This simple algorithm is actually, in essence, the Kruskal's algorithm \cite{kruskal1956shortest} used to build the Euclidian Minimal Spanning Tree (EMST). \\
+\item From the Kruskal's algorithm, we can finally obtain the solution by simply define $d$ the minimal distance allowing to browse every paths between two points in the point set as the length of the last edge added in the EMST.
 \end{itemize}
 
-\subsubsection*{Complexity considerations}
 
+\subsubsection*{Complexity considerations} 
 
+The various algorithm components can be broadly summarized as follows:
+\begin{itemize}
+	\item Compute, from the set of points, the Delaunay triangulation. Even though numerous approaches can be considered, we propose to perform this step using a standard Divide-and-Conquer strategy --~devise for instance in \cite{guibas1985primitives}~-- which has a $O(n\mathrm{log}(n))$ time complexity.\\
+	\item The previous step leads to the construction of $O(n)$ edges in the Delaunay triangulation that need to be sorted using their associated length, from which can expect a $O(n\mathrm{log}(n))$ time complexity.\\
+	\item Finally, implementing the Kruskal's can be done such that a $O(n\mathrm{log}(n))$ time complexity is achieved.
+\end{itemize}
+Hence, the overall time complexity of the algorithm is expected to be in $O(n\mathrm{log}(n))$, which satisfies the problem requirements.
 
-
-
-
-
-% \bibliography{star_system_doc}
+\bibliography{star_system_doc}
 
 \end{document}
 
