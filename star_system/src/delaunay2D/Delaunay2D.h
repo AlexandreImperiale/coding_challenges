@@ -28,7 +28,7 @@ namespace Delaunay2D {
 		\brief Projection of underside of a convex hull onto the xy-plane.
 		\params pnts are the set of input points included within the convex hull.
 		\params hull is the convex hull associated to the input points.
-		\returns the set of edges corresponding to the result of the projection onto the xy-plane.
+		\returns the set of edges corresponding to the result of the projection onto the xy-plane. WARNING: The set of edges is not unique!
 	*/
 	static auto projectUnderside(const std::vector<float3>& pnts, const std::vector<ConvexHull3D::Face3D>& hull) -> std::vector<uint2>
 	{
@@ -51,7 +51,7 @@ namespace Delaunay2D {
 	/*!
 		\brief Computing Delaunay triangulation associated to an input set of 2D points.
 		\params pnts is the set of 2D points.
-		\returns the set of edges forming the Delaunay triangulation.
+		\returns the set of edges forming the Delaunay triangulation. WARNING: The set of edges is not unique!
 	*/
 	static auto makeTriangulation(const std::vector<float2>& pnts) -> std::vector<uint2>
 	{
