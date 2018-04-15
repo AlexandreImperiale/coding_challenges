@@ -1,12 +1,13 @@
 #include <iostream>
 #include <string>
+#include <cmath>
 #include "Delaunay2D.h"
 
 /*! Testing if two floating points values are equal.
 */
 static bool areEqual(float a, float b, float eps = 1e-5)
 {
-	return std::abs(a - b) < eps;
+	return std::fabs(a - b) < eps;
 }
 
 /* Helper class for running test functions.
@@ -53,14 +54,34 @@ static bool testProjectUnderside0()
 	const auto faces = std::vector<ConvexHull3D::Face3D>{
 		ConvexHull3D::makeFace(pnts3D, 0, 1, 2),
 		ConvexHull3D::makeFace(pnts3D, 0, 2, 3),
-		ConvexHull3D::makeFace(pnts3D, 3, 1, 2),
-		ConvexHull3D::makeFace(pnts3D, 0, 1, 3),
+		ConvexHull3D::makeFace(pnts3D, 3, 1, 2)
 	};
 
 	// Projecting underside.
-	const auto edges = Delaunay2D::projectUnderside(pnts3D, faces);
+	auto edges = Delaunay2D::projectUnderside(pnts3D, faces);
+	Delaunay2D::removeDoublons(edges, 3);
 
 	return edges.size() == 5;
+}
+
+/*! \brief Testing removing doublons in set of edges.
+*/
+static bool testRemoveDoublons0()
+{
+	std::vector<uint2> edges = {
+		{0, 1},
+		{1, 2},
+		{2, 0},
+		{1, 0},
+		{2, 1},
+	};
+
+	Delaunay2D::removeDoublons(edges, 2);
+
+	return
+		edges[0].i == 0 && edges[0].j == 1 &&
+		edges[1].i == 0 && edges[1].j == 2 &&
+		edges[2].i == 1 && edges[2].j == 2 ;
 }
 
 int main()
@@ -70,10 +91,13 @@ int main()
 	// Testing lift operations.
 	runTest(testLift0, "Lift0");
 	runTest(testLift1, "Lift1");
-	std::cout << std::endl;
 
 	// Testing projection of underside.
 	runTest(testProjectUnderside0, "ProjectUnderside0");
 
+	// Testing removing doublons of edges.
+	runTest(testRemoveDoublons0, "RemoveDoublons0");
+
+	std::cout << std::endl;
 	return 0;
 }
