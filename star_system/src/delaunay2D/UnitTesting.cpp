@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cmath>
-#include "Delaunay2D.h"
+#include "DelaunayBuilder2D.h"
 
 /*! Testing if two floating points values are equal.
 */
@@ -22,7 +22,7 @@ template<typename Test> static void runTest(Test test, const std::string& testNa
 */
 static bool testLift0()
 {
-	const auto pnts3D = Delaunay2D::lift({
+	const auto pnts3D = Delaunay2D::DelaunayBuilder2D::lift({
 		{ float(0.00), float(1.2) }
 	});
 
@@ -31,7 +31,7 @@ static bool testLift0()
 
 static bool testLift1()
 {
-	const auto pnts3D = Delaunay2D::lift({
+	const auto pnts3D = Delaunay2D::DelaunayBuilder2D::lift({
 		{ float(0.00), float(1.2) },
 		{ float(-2.1), float(3.6) },
 	});
@@ -51,15 +51,15 @@ static bool testProjectUnderside0()
 	};
 
 	// Creating faces.
-	const auto faces = std::vector<ConvexHull3D::Face3D>{
-		ConvexHull3D::makeFace(pnts3D, 0, 1, 2),
-		ConvexHull3D::makeFace(pnts3D, 0, 2, 3),
-		ConvexHull3D::makeFace(pnts3D, 3, 1, 2)
+	const auto faces = std::vector<Delaunay2D::Face3D>{
+		Delaunay2D::Face3D::makeFace(pnts3D, 0, 1, 2),
+		Delaunay2D::Face3D::makeFace(pnts3D, 0, 2, 3),
+		Delaunay2D::Face3D::makeFace(pnts3D, 3, 1, 2)
 	};
 
 	// Projecting underside.
-	auto edges = Delaunay2D::projectUnderside(pnts3D, faces);
-	Delaunay2D::removeDoublons(edges, 3);
+	auto edges = Delaunay2D::DelaunayBuilder2D::projectUnderside(pnts3D, faces);
+	Delaunay2D::DelaunayBuilder2D::removeDoublons(edges, 3);
 
 	return edges.size() == 5;
 }
@@ -76,7 +76,7 @@ static bool testRemoveDoublons0()
 		{2, 1},
 	};
 
-	Delaunay2D::removeDoublons(edges, 2);
+	Delaunay2D::DelaunayBuilder2D::removeDoublons(edges, 2);
 
 	return
 		edges[0].i == 0 && edges[0].j == 1 &&
