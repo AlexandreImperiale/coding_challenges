@@ -11,9 +11,21 @@ namespace Delaunay2D {
 	*/
 	struct OutsideSet {
 
+		/*! \brief Default constructors & assignement operator.
+		*/
 		OutsideSet() = default;
+		OutsideSet& operator=(const OutsideSet&) = default;
+
+		/*! \brief Move constructor and move assignement definition.
+		*/
 		OutsideSet(OutsideSet&& outsideSet)
 			: pntIdxs(std::move(outsideSet.pntIdxs)), furthestPntIdx(outsideSet.furthestPntIdx) {}
+		OutsideSet& operator=(OutsideSet&& outsideSet)
+		{
+			pntIdxs = std::move(outsideSet.pntIdxs);
+			furthestPntIdx = outsideSet.furthestPntIdx;
+			return *this;
+		}
 
 		/*! \brief Associated index of outside points.
 		*/

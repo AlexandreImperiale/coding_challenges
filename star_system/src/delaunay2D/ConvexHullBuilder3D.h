@@ -48,19 +48,45 @@ namespace Delaunay2D {
 			return {};
 		}
 
-		/*! \brief Deleting a face from its face id, while maintaining the adjacency table.
+		/*! \brief Deleting a face from its face id while maintaining the adjacency table.
 		*/
-		void deleteFace(FaceId /*faceId*/)
+		void deleteFace(FaceId faceId)
+		{
+			// Removing face from neighbours.
+			for(const auto& neighbourFace : getNeighbours(faceId))
+			{
+				auto& neighbours = faceNeighbours_[neighbourFace];
+				neighbours.erase(std::find(neighbours.begin(), neighbours.end(), faceId));
+			}
+
+			// Removing associated neighbours.
+			faceNeighbours_.erase(faceNeighbours_.find(faceId));
+
+			// Removing associated outside set.
+			faceOutsideSets_.erase(faceOutsideSets_.find(faceId));
+
+			// Removing edges only if they did not have any incident faces.
+			const auto& face = getFace(faceId);
+			if(edgeIncidentFaces_[face.i].empty()) deleteEdge(face.i);
+			if(edgeIncidentFaces_[face.j].empty()) deleteEdge(face.j);
+			if(edgeIncidentFaces_[face.k].empty()) deleteEdge(face.k);
+
+			// Removing face.
+			faces_.erase(faces_.find(faceId));
+		}
+
+		/*! \brief Deleting a edge from its id.
+		*/
+		void deleteEdge(EdgeId /*edgeId*/)
 		{
 			// To Do !
-			// Use incident faces associated to an edge id.
 		}
 
 		/*! \brief Setting set of outside points index.
 		*/
 		void setFaceOutsideSet(FaceId faceId, OutsideSet&& outsideSet)
 		{
-			// To Do !
+			faceOutsideSets_[faceId] = std::move(outsideSet);
 		}
 
 		/*! \brief Accessing outside points associated to a face id.
