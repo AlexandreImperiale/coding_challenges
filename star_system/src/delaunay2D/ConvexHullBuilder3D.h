@@ -1,134 +1,225 @@
 #ifndef _CONVEX_HULL_BUILDER_3D_
 #define _CONVEX_HULL_BUILDER_3D_
 
-#include <vector>
+#include <algorithm>
 #include <array>
-#include <map>
+#include <stack>
+#include <unordered_set>
+#include <unordered_map>
+#include <vector>
 
-#include "Face3D.h"
+#include "ConvexHull3D.h"
 #include "OutsideSet.h"
-#include "Tools.h"
 
 namespace Delaunay2D {
 
-	/*! \brief Definition of Face and edge Ids.
-	*/
-	using FaceId = uint;
-	using EdgeId = uint;
-
-	/*! \brief Definition of a convex hull builder.
-	*/
 	class ConvexHullBuilder3D {
 
 	public:
 
-		/*! \brief Initializing first simplex.
+		/*! \brief Builder.
 		*/
-		std::array<FaceId, 4> init(const std::vector<float3>& pnts);
+		ConvexHullBuilder3D() : maxEdgeId_(0), maxFaceId_(0) {}
 
-		/*! \brief Accessing a face from its Id.
+		/*!
+			\brief Computing convex hull of a 3D point set.
+			\param pnts are the input points.
+			\returns a set of 3D faces corresponding to the convex hull of the point set.
 		*/
-		const Face3D& getFace(FaceId faceId) const
+		ConvexHull3D make(const std::vector<float3>& pnts)
 		{
-			return faces_.at(faceId);
-		}
+			// Declaration of convex hull to be built.
+			ConvexHull3D hull;
 
-		/*! brief Accessing neighbours of a face.
-		*/
-		const std::vector<FaceId>& getNeighbours(FaceId faceId) const
-		{
-			return faceNeighbours_.at(faceId);
-		}
+			// Creating first simplex.
+			init(pnts, hull);
 
-		/*! \brief Building new faces from every edges in the input set of faces and a point.
-		*/
-		std::vector<FaceId> addFacesFromBoundary(const std::vector<float3>& /*pnts*/, std::vector<FaceId> /*faces*/, uint /*pntIdx*/)
-		{
-			// To Do !
-			return {};
-		}
+			// Creating outside sets associated to created faces.
+			std::unordered_map<FaceId, OutsideSet> faceOutsideSets;
+			for(const auto& face : hull.faces)
+				faceOutsideSets[face.first] = OutsideSet{};
 
-		/*! \brief Deleting a face from its face id while maintaining the adjacency table.
-		*/
-		void deleteFace(FaceId faceId)
-		{
-			// Removing face from neighbours.
-			for(const auto& neighbourFace : getNeighbours(faceId))
+			// Creating outside sets associated to created faces.
+			for(unsigned int i = 0, ni = pnts.size(); i < ni; ++i)
+				for(const auto& face : hull.faces)
+					if(Face3DTools::isAbove(pnts[i], face.second))
+						OutsideSetTools::addPointIndex(faceOutsideSets[face.first], face.second, pnts, i);
+
+			// Initializing stack of faces to be processed
+			std::stack<FaceId> facesInProcess;
+			for(const auto& face : hull.faces)
+				if(!OutsideSetTools::isEmpty(faceOutsideSets[face.first]))
+				 	facesInProcess.push(face.first);
+
+			// Core loop of quickhull algo.
+			while(!facesInProcess.empty())
 			{
-				auto& neighbours = faceNeighbours_[neighbourFace];
-				neighbours.erase(std::find(neighbours.begin(), neighbours.end(), faceId));
-			}
+				// Poping top face id.
+				const auto currentFaceId = facesInProcess.top();
+				facesInProcess.pop();
 
-			// Removing associated neighbours.
-			faceNeighbours_.erase(faceNeighbours_.find(faceId));
+				// Accessing outside set.
+				const auto& outsideSet = faceOutsideSets[currentFaceId];
 
-			// Removing associated outside set.
-			faceOutsideSets_.erase(faceOutsideSets_.find(faceId));
+				// Building set of visible faces from the furthest point.
+				const auto visibleFacesId = makeConeOfVisibleFaces(hull, currentFaceId, pnts[outsideSet.furthestPntIdx]);
 
-			// Removing edges only if they did not have any incident faces.
-			const auto& face = getFace(faceId);
-			if(edgeIncidentFaces_[face.i].empty()) deleteEdge(face.i);
-			if(edgeIncidentFaces_[face.j].empty()) deleteEdge(face.j);
-			if(edgeIncidentFaces_[face.k].empty()) deleteEdge(face.k);
+				// Creating new faces in the hull builder from the boundary of the visible faces.
+				const auto newFacesId = addFacesFromVisibleFacesBoundary(hull, visibleFacesId, outsideSet.furthestPntIdx);
 
-			// Removing face.
-			faces_.erase(faces_.find(faceId));
-		}
+				// Creating outside sets associated to new faces.
+				for(const auto& newFaceId : newFacesId)
+					faceOutsideSets[newFaceId] = OutsideSet{};
 
-		/*! \brief Deleting a edge from its id.
-		*/
-		void deleteEdge(EdgeId /*edgeId*/)
-		{
-			// To Do !
-		}
+				// Creating outside sets associated to new faces.
+				for(const auto& visibleFaceId : visibleFacesId)
+					for(const auto& outsidePntIdx : faceOutsideSets[visibleFaceId].pntIdxs)
+						for(const auto& newFaceId : newFacesId)
+						{
+							const auto& newFace = hull.faces[newFaceId];
+							if(Face3DTools::isAbove(pnts[outsidePntIdx], newFace))
+									OutsideSetTools::addPointIndex(faceOutsideSets[newFaceId], newFace, pnts, outsidePntIdx);
+						}
 
-		/*! \brief Setting set of outside points index.
-		*/
-		void setFaceOutsideSet(FaceId faceId, OutsideSet&& outsideSet)
-		{
-			faceOutsideSets_[faceId] = std::move(outsideSet);
-		}
+				// Setting outside set of new faces and updating faces to be processed.
+				for(const auto& newFaceId : newFacesId)
+					if(!OutsideSetTools::isEmpty(faceOutsideSets[newFaceId]))
+						facesInProcess.push(newFaceId);
 
-		/*! \brief Accessing outside points associated to a face id.
-		*/
-		const OutsideSet& getFaceOutsideSet(FaceId faceId) const
-		{
-			return faceOutsideSets_.at(faceId);
-		}
+				// Deleting visible faces & associated outside sets.
+				for(const auto& visibleFaceId : visibleFacesId)
+				{
+					deleteFace(hull, visibleFaceId);
+					faceOutsideSets.erase(faceOutsideSets.find(visibleFaceId));
+				}
+			};
 
-		/*! \brief Accessing built convex hull.
-		*/
-		std::vector<Face3D> get()
-		{
-			// To Do !
-			return {};
+			return hull;
 		}
 
 	private:
 
-		/*! \brief Associated faces.
+		/*! \brief Associated max face and edge id;
 		*/
-		std::map<FaceId, Face3D> faces_;
+		unsigned int maxFaceId_, maxEdgeId_;
 
-		/*! \brief Mapping from face id to face neighbours.
+		/*! \brief Initializing first simplex.
 		*/
-		std::map<FaceId, std::vector<FaceId>> faceNeighbours_;
+		void init(const std::vector<float3>& pnts, ConvexHull3D& hull);
 
-		/*! \brief Mapping from face id to outside set of points.
+		/*! \brief Extracting from an outside point coordinate and an initial face id the cone of visible faces.
 		*/
-		std::map<FaceId, OutsideSet> faceOutsideSets_;
+		std::unordered_set<FaceId>  makeConeOfVisibleFaces(const ConvexHull3D& hull, FaceId currentFace, const float3& p)
+		{
+			// Initializing set.
+			std::unordered_set<FaceId> visibleFaces;
+			visibleFaces.insert(currentFace);
 
-		/*! \brief Associated edges.
-		*/
-		std::map<EdgeId, uint2> edges_;
+			// Initializing set of visited candidates.
+			std::unordered_set<FaceId> visitedCandidates;
+			visitedCandidates.insert(currentFace);
 
-		/*! \brief Mapping from edge id to incident faces.
-		*/
-		std::map<EdgeId, std::vector<FaceId>> edgeIncidentFaces_;
+			std::stack<FaceId> candidates;
+			for(const auto& neighbour : hull.faceNeighbours.at(currentFace))
+				candidates.push(neighbour);
 
-		/*! \brief Mapping from edge id to edge neighbours.
+			while(!candidates.empty())
+			{
+				const auto candidateFace = candidates.top();
+				candidates.pop();
+
+				visitedCandidates.insert(candidateFace);
+				if(Face3DTools::isAbove(p, hull.faces.at(candidateFace)))
+					visibleFaces.insert(candidateFace);
+
+				for(const auto& neighbour : hull.faceNeighbours.at(candidateFace))
+					if(visitedCandidates.find(neighbour) == visitedCandidates.end())
+						candidates.push(neighbour);
+			}
+
+			return visibleFaces;
+		}
+
+		/*! \brief Building new faces from every edges in the input set of faces and a point.
 		*/
-		std::map<EdgeId, std::vector<EdgeId>> edgeNeighbours_;
+		std::unordered_set<FaceId> addFacesFromVisibleFacesBoundary(ConvexHull3D& hull, const std::unordered_set<FaceId>& faces, unsigned int /*pntIdx*/)
+		{
+			std::unordered_set<FaceId> newFaces;
+
+			// Extracting edge boundaries from faces.
+			std::unordered_set<EdgeId> boundary;
+			for(const auto& faceId : faces)
+			{
+				const auto& face = hull.faces[faceId];
+				boundary.insert(face.e0);
+				boundary.insert(face.e1);
+				boundary.insert(face.e2);
+			}
+
+			// Creating new edges.
+			// To Do !
+
+			// Creating new faces.
+			// To Do !
+
+			return newFaces;
+		}
+
+		/*!
+			\brief Creating a face from three points.
+			\params pnts are the input 3D points.
+		*/
+		/*static Face3D makeFace(const std::vector<float3>& pnts, const std::EdgeId e0, EdgeId e1, EdgeId e2)
+		{
+			Face3D face;
+			face.i = p0; face.j = p1; face.k = p2;
+
+			// Computing center.
+			const float coef = float(1.0 / 3.0);
+			face.center.x = face.center.y = face.center.z = 0.;
+			Tools::addIn(face.center, coef, pnts[p0]);
+			Tools::addIn(face.center, coef, pnts[p1]);
+			Tools::addIn(face.center, coef, pnts[p2]);
+
+			// Computing normal.
+			const auto du = Tools::makeVec(pnts[p0], pnts[p1]);
+			const auto dv = Tools::makeVec(pnts[p0], pnts[p2]);
+			face.normal = Tools::cross(du, dv);
+
+			return face;
+		}*/
+
+		/*! \brief Deleting a face from its face id while maintaining the adjacency table.
+		*/
+		void deleteFace(ConvexHull3D& hull, FaceId faceId)
+		{
+			// Removing face from neighbours.
+			for(const auto& neighbourFaceId : hull.faceNeighbours[faceId])
+			{
+				auto& neighbours = hull.faceNeighbours[neighbourFaceId];
+				neighbours.erase(neighbours.find(faceId));
+			}
+
+			// Removing associated neighbours.
+			hull.faceNeighbours.erase(hull.faceNeighbours.find(faceId));
+
+			// Removing edges only if they did not have any incident faces.
+			const auto& face = hull.faces.at(faceId);
+			if(hull.edgeIncidentFaces[face.e0].empty()) deleteEdge(hull, face.e0);
+			if(hull.edgeIncidentFaces[face.e1].empty()) deleteEdge(hull, face.e1);
+			if(hull.edgeIncidentFaces[face.e2].empty()) deleteEdge(hull, face.e2);
+			
+			// Removing face.
+			hull.faces.erase(hull.faces.find(faceId));
+		}
+
+		/*! \brief Deleting a edge from its id.
+		*/
+		void deleteEdge(ConvexHull3D& hull, EdgeId edgeId)
+		{
+			hull.edgeIncidentFaces.erase(hull.edgeIncidentFaces.find(edgeId));
+			hull.edges.erase(hull.edges.find(edgeId));
+		}
 	};
 }
 

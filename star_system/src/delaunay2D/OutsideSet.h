@@ -29,15 +29,18 @@ namespace Delaunay2D {
 
 		/*! \brief Associated index of outside points.
 		*/
-		std::vector<uint> pntIdxs;
+		std::vector<unsigned int> pntIdxs;
 
 		/*! \brief Index of furthest point.
 		*/
-		uint furthestPntIdx;
+		unsigned int furthestPntIdx;
+	};
+
+	struct OutsideSetTools {
 
 		/*! \brief Adding a point in the outside set & updating the index of the furthest point.
 		*/
-		static void addPointIndex(OutsideSet& outsideSet, const Face3D& face, const std::vector<float3>& pnts, uint pntIdx)
+		static void addPointIndex(OutsideSet& outsideSet, const Face3D& face, const std::vector<float3>& pnts, unsigned int pntIdx)
 		{
 			outsideSet.pntIdxs.push_back(pntIdx);
 			if(outsideSet.pntIdxs.size() == 1) outsideSet.furthestPntIdx = pntIdx;

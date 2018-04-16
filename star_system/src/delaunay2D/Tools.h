@@ -8,9 +8,14 @@
 
 struct float2 { float x; float y; };
 struct float3 { float x; float y; float z; };
-struct uint2 { uint i; uint j; };
+struct uint2 { unsigned int i; unsigned int j; };
 
 namespace Delaunay2D {
+
+	/*! \brief Definition of Face and edge Ids.
+	*/
+	using FaceId = unsigned int;
+	using EdgeId = unsigned int;
 
 	/*! \brief Floating point geometric epsilon.
 	*/

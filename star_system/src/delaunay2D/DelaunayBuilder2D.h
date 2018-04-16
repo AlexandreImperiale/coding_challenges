@@ -3,7 +3,7 @@
 
 #include <vector>
 
-#include "ConvexHull3D.h"
+#include "ConvexHullBuilder3D.h"
 #include "Face3D.h"
 #include "Tools.h"
 
@@ -34,19 +34,22 @@ namespace Delaunay2D {
 			\returns the set of edges corresponding to the result of the projection onto the xy-plane.
 				WARNING: The set of edges is not unique!
 		*/
-		static std::vector<uint2> projectUnderside(const std::vector<float3>& pnts, const std::vector<Face3D>& hull)
+		static std::vector<uint2> projectUnderside(const std::vector<float3>& pnts, const ConvexHull3D& hull)
 		{
 			std::vector<uint2> edges;
 
 			// Extracting center of hull.
-			const auto center = ConvexHull3D::getCenter(pnts, hull);
+			const auto center = ConvexHull3DTools::getCenter(pnts, hull);
 
 			// Applying projection.
-			edges.reserve(3 * hull.size());
-			for(const auto& face : hull)
-				if(Face3D::isDownward(center, face))
-					for(const auto& e : Face3D::getEdges(face))
-						edges.push_back(e);
+			edges.reserve(3 * hull.faces.size());
+			for(const auto& face : hull.faces)
+				if (Face3DTools::isDownward(center, face.second))
+				{
+					edges.push_back(hull.edges.at(face.second.e0));
+					edges.push_back(hull.edges.at(face.second.e1));
+					edges.push_back(hull.edges.at(face.second.e2));
+				}
 			edges.shrink_to_fit();
 
 			return edges;
@@ -61,7 +64,7 @@ namespace Delaunay2D {
 		static std::vector<uint2> makeTriangulation(const std::vector<float2>& pnts)
 		{
 			const auto pnts3D = lift(pnts);
-			const auto hull = ConvexHull3D::makeConvexHull(pnts3D);
+			const auto hull = ConvexHullBuilder3D{}.make(pnts3D);
 			return projectUnderside(pnts3D, hull);
 		}
 
@@ -72,7 +75,7 @@ namespace Delaunay2D {
 			\params edges is the set of edges with potential doublons.
 			\params maxPntIdx is the maximal index of points linked to an edge in the set of edges.
 		*/
-		static void removeDoublons(std::vector<uint2>& edges, uint maxPntIdx)
+		static void removeDoublons(std::vector<uint2>& edges, unsigned int maxPntIdx)
 		{
 			// Imposing same directions to every edges.
 			for(auto& e : edges)
@@ -91,7 +94,6 @@ namespace Delaunay2D {
 				return e0.i == e1.i && e0.j == e1.j;
 			}), edges.end());
 		}
-
 	};
 }
 

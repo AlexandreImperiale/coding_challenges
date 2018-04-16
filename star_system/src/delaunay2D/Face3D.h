@@ -10,9 +10,9 @@ namespace Delaunay2D {
 	*/
 	struct Face3D {
 
-		/*! \brief Associated point indexes.
+		/*! \brief Associated edge ids.
 		*/
-		uint i, j, k;
+		EdgeId e0, e1, e2;
 
 		/*! \brief Associated plane normal.
 		*/
@@ -21,41 +21,9 @@ namespace Delaunay2D {
 		/*! \brief Associated center.
 		*/
 		float3 center;
+	};
 
-		/*!
-			\brief Creating a face from three points.
-			\params pnts are the input 3D points.
-			\params p0, p1, p2 are the input coordinate points.
-		*/
-		static Face3D makeFace(const std::vector<float3>& pnts, uint p0, uint p1, uint p2)
-		{
-			Face3D face;
-			face.i = p0; face.j = p1; face.k = p2;
-
-			// Computing center.
-			const float coef = float(1.0 / 3.0);
-			face.center.x = face.center.y = face.center.z = 0.;
-			Tools::addIn(face.center, coef, pnts[p0]);
-			Tools::addIn(face.center, coef, pnts[p1]);
-			Tools::addIn(face.center, coef, pnts[p2]);
-
-			// Computing normal.
-			const auto du = Tools::makeVec(pnts[p0], pnts[p1]);
-			const auto dv = Tools::makeVec(pnts[p0], pnts[p2]);
-			face.normal = Tools::cross(du, dv);
-
-			return face;
-		}
-
-		/*!
-			\brief Extracting every edges associated to a face.
-			\params face is the input face.
-			\returns the array of three edges forming the face.
-		*/
-		static std::array<uint2, 3> getEdges(const Face3D& face)
-		{
-			return {{ { face.i, face.j}, { face.j, face.k}, { face.k, face.i} }};
-		}
+	struct Face3DTools {
 
 		/*!
 			\brief Testing if a face in a convex hull is a downward facing face.

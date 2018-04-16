@@ -43,6 +43,7 @@ static bool testLift1()
 */
 static bool testProjectUnderside0()
 {
+	/*
 	const auto pnts3D = std::vector<float3>{
 		{ float(0.0), float(0.0), float(1.0) },
 		{ float(1.0), float(0.0), float(2.0) },
@@ -62,6 +63,7 @@ static bool testProjectUnderside0()
 	Delaunay2D::DelaunayBuilder2D::removeDoublons(edges, 3);
 
 	return edges.size() == 5;
+	*/
 }
 
 /*! \brief Testing removing doublons in set of edges.
@@ -91,9 +93,6 @@ int main()
 	// Testing lift operations.
 	runTest(testLift0, "Lift0");
 	runTest(testLift1, "Lift1");
-
-	// Testing projection of underside.
-	runTest(testProjectUnderside0, "ProjectUnderside0");
 
 	// Testing removing doublons of edges.
 	runTest(testRemoveDoublons0, "RemoveDoublons0");
