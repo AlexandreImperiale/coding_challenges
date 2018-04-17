@@ -46,6 +46,13 @@ namespace Delaunay2D {
 			return { u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x };
 		}
 
+		/*! \brief Computing dot product from two input vectors.
+		*/
+		static float dot(const float3& u, const float3& v)
+		{
+			return u.x * v.x + u.y * v.y + u.z * v.z;
+		}
+
 		/*! \brief Computing square distance between two points.
 		*/
 		static float squareDistance(const float3& p, const float3& q)

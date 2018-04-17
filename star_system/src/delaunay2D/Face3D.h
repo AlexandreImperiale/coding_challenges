@@ -51,7 +51,7 @@ namespace Delaunay2D {
 		*/
 		static bool isAbove(const float3& pnt, const Face3D& face)
 		{
-			const auto v = Tools::makeVec(pnt, face.center);
+			const auto v = Tools::makeVec(face.center, pnt);
 			return v.x * face.normal.x + v.y * face.normal.y + v.z * face.normal.z > -GEOM_EPSILON;
 		}
 	};
