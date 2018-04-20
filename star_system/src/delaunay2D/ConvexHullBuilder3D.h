@@ -4,10 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <stack>
-#include <unordered_set>
 #include <unordered_map>
 #include <vector>
-
 #include "ConvexHull3D.h"
 #include "OutsideSet.h"
 
@@ -42,21 +40,31 @@ namespace Delaunay2D {
 			// Creating outside sets associated to created faces.
 			for(unsigned int i = 0, ni = pnts.size(); i < ni; ++i)
 				for(const auto& face : hull.faces)
-					if(Face3DTools::isAbove(pnts[i], face.second))
+					if (Face3DTools::isAbove(pnts[i], face.second))
+					{
 						OutsideSetTools::addPointIndex(faceOutsideSets[face.first], face.second, pnts, i);
+						break;
+					}
 
 			// Initializing stack of faces to be processed
-			std::stack<FaceId> facesInProcess;
+			std::vector<FaceId> facesInProcess;
 			for(const auto& face : hull.faces)
 				if(!OutsideSetTools::isEmpty(faceOutsideSets[face.first]))
-				 	facesInProcess.push(face.first);
+				 	facesInProcess.push_back(face.first);
+
+			// FOR DEBUG.
+			size_t idbg = 0;
 
 			// Core loop of quickhull algo.
 			while(!facesInProcess.empty())
 			{
-				// Poping top face id.
-				const auto currentFaceId = facesInProcess.top();
-				facesInProcess.pop();
+				// FOR DEBUG.
+				ConvexHull3DTools::write(pnts, hull, "Blank/dbg_" + std::to_string(idbg) + ".vtk");
+				++idbg;
+
+				// Poping first face id to process.
+				const auto currentFaceId = facesInProcess.back();
+				facesInProcess.pop_back();
 
 				// Accessing outside set.
 				const auto& outsideSet = faceOutsideSets[currentFaceId];
@@ -68,29 +76,41 @@ namespace Delaunay2D {
 				const auto newFacesId = addFacesFromVisibleFacesBoundary(hull, pnts, visibleFacesId, outsideSet.furthestPntIdx);
 
 				// Creating outside sets associated to new faces.
-				for(const auto& newFaceId : newFacesId)
+				for (const auto& newFaceId : newFacesId)
 					faceOutsideSets[newFaceId] = OutsideSet{};
 
 				// Creating outside sets associated to new faces.
-				for(const auto& visibleFaceId : visibleFacesId)
-					for(const auto& outsidePntIdx : faceOutsideSets[visibleFaceId].pntIdxs)
-						for(const auto& newFaceId : newFacesId)
-						{
-							const auto& newFace = hull.faces[newFaceId];
-							if(Face3DTools::isAbove(pnts[outsidePntIdx], newFace))
+				{
+					for (const auto& visibleFaceId : visibleFacesId)
+						for (const auto& outsidePntIdx : faceOutsideSets[visibleFaceId].pntIdxs)
+							for (const auto& newFaceId : newFacesId)
+							{
+								const auto& newFace = hull.faces[newFaceId];
+								if (Face3DTools::isAbove(pnts[outsidePntIdx], newFace))
+								{
 									OutsideSetTools::addPointIndex(faceOutsideSets[newFaceId], newFace, pnts, outsidePntIdx);
-						}
+									break;
+								}
+							}
+				}
 
 				// Setting outside set of new faces and updating faces to be processed.
-				for(const auto& newFaceId : newFacesId)
-					if(!OutsideSetTools::isEmpty(faceOutsideSets[newFaceId]))
-						facesInProcess.push(newFaceId);
+				for (const auto& newFaceId : newFacesId)
+					if (!OutsideSetTools::isEmpty(faceOutsideSets[newFaceId]))
+						facesInProcess.push_back(newFaceId);
 
 				// Deleting visible faces & associated outside sets.
-				for(const auto& visibleFaceId : visibleFacesId)
+				for (const auto& visibleFaceId : visibleFacesId)
 				{
+					// Deleting faces.
 					deleteFace(hull, visibleFaceId);
+
+					// Deleting associated outside face.
 					faceOutsideSets.erase(faceOutsideSets.find(visibleFaceId));
+
+					// Removing face from faces to be processed.
+					const auto it = std::find(facesInProcess.begin(), facesInProcess.end(), visibleFaceId);
+					if(it != facesInProcess.end()) facesInProcess.erase(it);
 				}
 			};
 
@@ -108,14 +128,14 @@ namespace Delaunay2D {
 		void init(const std::vector<float3>& pnts, ConvexHull3D& hull)
 		{
 			const auto begin = pnts.begin(); const auto end = pnts.end();
-			const auto p0 = std::distance(begin, std::min_element(begin, end, [](const float3& p, const float3& q) { return p.x < q.x; }));
-			const auto p1 = std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.x < q.x; }));
-			const auto p2 = std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.y < q.y; }));
-			const auto p3 = std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.z < q.z; }));
+			const auto p0 = 0; // std::distance(begin, std::min_element(begin, end, [](const float3& p, const float3& q) { return p.x < q.x; }));
+			const auto p1 = 1; // std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.x < q.x; }));
+			const auto p2 = 2; // std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.y < q.y; }));
+			const auto p3 = 3; // std::distance(begin, std::max_element(begin, end, [](const float3& p, const float3& q) { return p.z < q.z; }));
 
 			// Creating edges.
 			const auto e01 = addEdge(hull, p0, p1);
-			const auto e12 = addEdge(hull, p1, p1);
+			const auto e12 = addEdge(hull, p1, p2);
 			const auto e02 = addEdge(hull, p0, p2);
 			const auto e03 = addEdge(hull, p0, p3);
 			const auto e13 = addEdge(hull, p1, p3);
@@ -124,7 +144,7 @@ namespace Delaunay2D {
 			// Creating faces.
 			const auto f0 = addFace(pnts, hull, e02, e01, e12);
 			const auto f1 = addFace(pnts, hull, e12, e13, e23);
-			const auto f2 = addFace(pnts, hull, e02, e03, e23);
+			const auto f2 = addFace(pnts, hull, e03, e02, e23);
 			const auto f3 = addFace(pnts, hull, e01, e03, e13);
 
 			// Creating face neighbours.
@@ -155,20 +175,20 @@ namespace Delaunay2D {
 			visitedCandidates.insert(currentFace);
 
 			std::stack<FaceId> candidates;
-			for(const auto& neighbour : hull.faceNeighbours.at(currentFace))
+			for (const auto& neighbour : hull.faceNeighbours.at(currentFace))
 				candidates.push(neighbour);
 
-			while(!candidates.empty())
+			while (!candidates.empty())
 			{
 				const auto candidateFace = candidates.top();
 				candidates.pop();
 
 				visitedCandidates.insert(candidateFace);
-				if(Face3DTools::isAbove(p, hull.faces.at(candidateFace)))
+				if (Face3DTools::isAbove(p, hull.faces.at(candidateFace)))
 					visibleFaces.insert(candidateFace);
 
-				for(const auto& neighbour : hull.faceNeighbours.at(candidateFace))
-					if(visitedCandidates.find(neighbour) == visitedCandidates.end())
+				for (const auto& neighbour : hull.faceNeighbours.at(candidateFace))
+					if (visitedCandidates.find(neighbour) == visitedCandidates.end())
 						candidates.push(neighbour);
 			}
 
@@ -179,17 +199,8 @@ namespace Delaunay2D {
 		*/
 		std::vector<FaceId> addFacesFromVisibleFacesBoundary(ConvexHull3D& hull, const std::vector<float3>& pnts, const std::unordered_set<FaceId>& faces, unsigned int pntIdx)
 		{
-			std::vector<FaceId> newFaces;
-
 			// Extracting edge boundaries from faces.
-			std::unordered_set<EdgeId> boundary;
-			for(const auto& faceId : faces)
-			{
-				const auto& face = hull.faces[faceId];
-				boundary.insert(face.e0);
-				boundary.insert(face.e1);
-				boundary.insert(face.e2);
-			}
+			const auto boundary = getBoundary(hull, faces);
 			const size_t boundarySz = boundary.size();
 
 			// Creating loop of connected edges.
@@ -198,21 +209,26 @@ namespace Delaunay2D {
 			connectedEdges.push_back(*boundary.begin());
 			for (size_t i = 1; i < boundarySz; ++i)
 			{
-				// Extracting last point in previous edge.
-				const auto p1 = hull.edges.at(connectedEdges.back()).j;
+				// Extracting previous edge id.
+				const auto previousEdgeId = connectedEdges.back();
 
-				// Find edge in boundary avec first point as p1.
-				auto it = std::find_if(boundary.begin(), boundary.end(), [&hull, p1](const EdgeId& id)
+				// Extracting last point in previous edge.
+				const auto p1 = hull.edges.at(previousEdgeId).j;
+
+				// Find edge in boundary with first point as p1.
+				auto it = std::find_if(boundary.begin(), boundary.end(), [&hull, previousEdgeId, p1](const EdgeId& id)
 				{
-					const auto& edge = hull.edges.at(id);
-					return edge.i == p1 || edge.j == p1;
+					if (id != previousEdgeId)
+					{
+						const auto& edge = hull.edges.at(id);
+						return (edge.i == p1 || edge.j == p1);
+					}
+					else return false;
 				});
 
 				// If edge is opposite then reverse edge.
 				auto& edge = hull.edges.at(*it);
 				if (edge.j == p1) std::swap(edge.i, edge.j);
-
-				// Adding to edge loop & creating new edge.
 				connectedEdges.push_back(*it);
 			}
 
@@ -222,7 +238,7 @@ namespace Delaunay2D {
 			const auto t0 = Tools::makeVec(pnts[e0.i], pnts[e0.j]);
 			const auto t1 = Tools::makeVec(pnts[e1.i], pnts[e1.j]);
 			const auto n0 = Tools::makeVec(pnts[e0.i], pnts[pntIdx]);
-			const bool zplus = Tools::dot(n0, Tools::cross(t0, t1)) > -GEOM_EPSILON;
+			const bool zplus = Tools::dot(n0, Tools::cross(t0, t1)) > GEOM_EPSILON;
 
 			// Creating set of new edges.
 			std::vector<EdgeId> newEdges;
@@ -235,56 +251,94 @@ namespace Delaunay2D {
 			}
 
 			// Creating new faces.
+			std::vector<FaceId> newFaces;
 			newFaces.reserve(boundarySz);
 			for (size_t i = 0; i < boundarySz-1; ++i)
 				newFaces.push_back(addFace(pnts, hull, connectedEdges[i], newEdges[i], newEdges[i + 1]));
-			newFaces.push_back(addFace(pnts, hull, connectedEdges[boundarySz - 1], newEdges[boundarySz - 1], newEdges[0]));
+			newFaces.push_back(addFace(pnts, hull, connectedEdges.back(), newEdges.back(), newEdges.front()));
 
-			// Updating neighbouring tables by adding incident faces of boundary edges.
+			// Updating neighbouring relations.
 			for (size_t i = 0; i < boundarySz; ++i)
+			{
+				// Adding new faces to neihbouring faces.
+				for (const auto& face : hull.edgeIncidentFaces[connectedEdges[i]])
+					hull.faceNeighbours[face].push_back(newFaces[i]);
+
+				// Updating new faces neighbouring tables by adding incident faces of boundary edges and
 				hull.faceNeighbours[newFaces[i]] = hull.edgeIncidentFaces[connectedEdges[i]];
 
-			// Adding to neighbour new faces.
+				// Adding new faces in incident faces tables of connected edges.
+				hull.edgeIncidentFaces[connectedEdges[i]].push_back(newFaces[i]);
+			}
+
+			// Adding new faces to neighbour tables.
 			{ 
 				// Special treatment for first face.
 				auto& faceNeighbours0 = hull.faceNeighbours[newFaces[0]];
-				faceNeighbours0.insert(newFaces.back());
-				faceNeighbours0.insert(newFaces[1]);
+				faceNeighbours0.push_back(newFaces.back());
+				faceNeighbours0.push_back(newFaces[1]);
 			}
 			for (size_t i = 1; i < boundarySz - 1; ++i)
 			{
 				auto& faceNeighbours = hull.faceNeighbours[newFaces[i]];
-				faceNeighbours.insert(newFaces[i + 1]);
-				faceNeighbours.insert(newFaces[i - 1]);
+				faceNeighbours.push_back(newFaces[i + 1]);
+				faceNeighbours.push_back(newFaces[i - 1]);
 			}
 			{
 				// Special treatment for last face.
 				auto& faceNeighboursN = hull.faceNeighbours[newFaces.back()];
-				faceNeighboursN.insert(newFaces[boundarySz - 2]);
-				faceNeighboursN.insert(newFaces[0]);
+				faceNeighboursN.push_back(newFaces[boundarySz - 2]);
+				faceNeighboursN.push_back(newFaces[0]);
 			}
-
-			// Updating incident faces tables of connected edges.
-			for (size_t i = 0; i < boundarySz; ++i)
-				hull.edgeIncidentFaces[connectedEdges[i]].insert(newFaces[i]);
 
 			// Creating incident faces tables of new edges.
-			{
-				// Special treatment for first edge.
-				std::unordered_set<FaceId> incidentFaces;
-				incidentFaces.insert(newFaces[0]);
-				incidentFaces.insert(newFaces.back());
-				hull.edgeIncidentFaces[newEdges[0]] = std::move(incidentFaces);
-			}
+			hull.edgeIncidentFaces[newEdges[0]] = { newFaces[0], newFaces.back() };
 			for (size_t i = 1; i < boundarySz; ++i)
-			{
-				std::unordered_set<FaceId> incidentFaces;
-				incidentFaces.insert(newFaces[i]);
-				incidentFaces.insert(newFaces[i-1]);
-				hull.edgeIncidentFaces[newEdges[i]] = std::move(incidentFaces);
-			}
+				hull.edgeIncidentFaces[newEdges[i]] = { newFaces[i], newFaces[i - 1] };
 
 			return newFaces;
+		}
+
+		/*! \brief Extracting boundary of a connected set of faces.
+		*/
+		std::vector<EdgeId> getBoundary(const ConvexHull3D& hull, const std::unordered_set<FaceId>& facesId)
+		{
+			std::unordered_map<EdgeId, unsigned int> count;
+			for (const auto& faceId : facesId)
+			{
+				const auto& face = hull.faces.at(faceId);
+
+				// first edge.
+				{
+					const auto it = count.find(face.e0);
+					if (it == count.end()) count[face.e0] = 1;
+					else ++(it->second);
+				}
+
+				// second edge.
+				{
+					const auto it = count.find(face.e1);
+					if (it == count.end()) count[face.e1] = 1;
+					else ++(it->second);
+				}
+
+				// third edge.
+				{
+					const auto it = count.find(face.e2);
+					if (it == count.end()) count[face.e2] = 1;
+					else ++(it->second);
+				}
+			}
+
+			// Computing boundary from occurence counts.
+			std::vector<EdgeId> boundary;
+			boundary.reserve(3 * facesId.size());
+			for (const auto& c : count)
+				if (c.second == 1)
+					boundary.push_back(c.first);
+			boundary.shrink_to_fit();
+			
+			return boundary;
 		}
 
 		/*! \brief Adding a new edge in hull from two point indexes.
@@ -294,6 +348,7 @@ namespace Delaunay2D {
 			EdgeId id = maxEdgeId_;
 			hull.edges[id] = { p0, p1 };
 			++maxEdgeId_;
+			return id;
 		}
 
 		/*! \brief Adding a new face in hull from three edges.
@@ -306,7 +361,7 @@ namespace Delaunay2D {
 
 			// Creating face
 			hull.faces[faceId] = Face3D{};
-			auto& face = hull.faces.at(maxFaceId_);
+			auto& face = hull.faces.at(faceId);
 
 			// Setting edge ids.
 			face.e0 = e0; face.e1 = e1; face.e2 = e2;
@@ -314,7 +369,7 @@ namespace Delaunay2D {
 			// Extracting pnt index.
 			const auto& edge0 = hull.edges[e0];
 			const auto& edge1 = hull.edges[e1];
-			const auto p2 = edge1.i == edge0.i ? edge1.j : edge1.i;
+			const auto p2 = (edge1.i == edge0.i || edge1.i == edge0.j) ? edge1.j : edge1.i;
 
 			// Computing center.
 			const float coef = float(1.0 / 3.0);
@@ -339,28 +394,54 @@ namespace Delaunay2D {
 			for(const auto& neighbourFaceId : hull.faceNeighbours[faceId])
 			{
 				auto& neighbours = hull.faceNeighbours[neighbourFaceId];
-				neighbours.erase(neighbours.find(faceId));
+				neighbours.erase(std::find(neighbours.begin(), neighbours.end(), faceId));
 			}
 
-			// Removing associated neighbours.
+			// Removing associated neighbour table.
 			hull.faceNeighbours.erase(hull.faceNeighbours.find(faceId));
 
-			// Removing edges only if they did not have any incident faces.
-			const auto& face = hull.faces.at(faceId);
-			if(hull.edgeIncidentFaces[face.e0].empty()) deleteEdge(hull, face.e0);
-			if(hull.edgeIncidentFaces[face.e1].empty()) deleteEdge(hull, face.e1);
-			if(hull.edgeIncidentFaces[face.e2].empty()) deleteEdge(hull, face.e2);
-			
-			// Removing face.
-			hull.faces.erase(hull.faces.find(faceId));
-		}
+			// Locating face in hull faces.
+			const auto it = hull.faces.find(faceId);
+			const auto& face = it->second;
 
-		/*! \brief Deleting a edge from its id.
-		*/
-		void deleteEdge(ConvexHull3D& hull, EdgeId edgeId)
-		{
-			hull.edgeIncidentFaces.erase(hull.edgeIncidentFaces.find(edgeId));
-			hull.edges.erase(hull.edges.find(edgeId));
+			// Removing face from first edge incident table.
+			{
+				const auto edgeIt = hull.edgeIncidentFaces.find(face.e0);
+				auto& incFaces = edgeIt->second;
+				incFaces.erase(std::find(incFaces.begin(), incFaces.end(), faceId));
+				if (incFaces.empty())
+				{
+					hull.edgeIncidentFaces.erase(edgeIt);
+					hull.edges.erase(hull.edges.find(face.e0));
+				}
+			}
+
+			// Removing face from second edge incident table.
+			{
+				const auto edgeIt = hull.edgeIncidentFaces.find(face.e1);
+				auto& incFaces = edgeIt->second;
+				incFaces.erase(std::find(incFaces.begin(), incFaces.end(), faceId));
+				if (incFaces.empty())
+				{
+					hull.edgeIncidentFaces.erase(edgeIt);
+					hull.edges.erase(hull.edges.find(face.e1));
+				}
+			}
+
+			// Removing face from third edge incident table.
+			{
+				const auto edgeIt = hull.edgeIncidentFaces.find(face.e2);
+				auto& incFaces = edgeIt->second;
+				incFaces.erase(std::find(incFaces.begin(), incFaces.end(), faceId));
+				if (incFaces.empty())
+				{
+					hull.edgeIncidentFaces.erase(edgeIt);
+					hull.edges.erase(hull.edges.find(face.e2));
+				}
+			}
+
+			// Removing face.
+			hull.faces.erase(it);
 		}
 	};
 }

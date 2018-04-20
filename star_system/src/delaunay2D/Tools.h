@@ -19,7 +19,7 @@ namespace Delaunay2D {
 
 	/*! \brief Floating point geometric epsilon.
 	*/
-	static const float GEOM_EPSILON = float(1e-5);
+	static const float GEOM_EPSILON = float(1e-4);
 
 	struct Tools {
 
@@ -62,7 +62,6 @@ namespace Delaunay2D {
 			const float dz = q.z - p.z;
 			return dx * dx + dy * dy + dz * dz;
 		}
-
 	};
 }
 

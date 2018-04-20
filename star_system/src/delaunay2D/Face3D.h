@@ -39,8 +39,8 @@ namespace Delaunay2D {
 				(center.y - face.center.y) * face.normal.y +
 				(center.z - face.center.z) * face.normal.z;
 
-			if( dot > float(0.0) ) return face.normal.z > -GEOM_EPSILON;
-			else return face.normal.z < GEOM_EPSILON;
+			if( dot > float(0.0) ) return face.normal.z > GEOM_EPSILON;
+			else return face.normal.z < -GEOM_EPSILON;
 		}
 
 		/*!
@@ -52,7 +52,7 @@ namespace Delaunay2D {
 		static bool isAbove(const float3& pnt, const Face3D& face)
 		{
 			const auto v = Tools::makeVec(face.center, pnt);
-			return v.x * face.normal.x + v.y * face.normal.y + v.z * face.normal.z > -GEOM_EPSILON;
+			return v.x * face.normal.x + v.y * face.normal.y + v.z * face.normal.z > GEOM_EPSILON;
 		}
 	};
 }
