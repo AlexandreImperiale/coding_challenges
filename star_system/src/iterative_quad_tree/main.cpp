@@ -267,6 +267,8 @@ static std::vector<uint2> makeEMST(const std::vector<float2>& pnts)
 		removeDoublons(samplingGraph, pnts.size());
 
 		success = applyKruskal(pnts, samplingGraph, emst);
+
+		++stencilRadius;
 	}
 
 	if (!success)
@@ -324,8 +326,18 @@ void test2()
 	Tools::write(pnts, makeEMST(pnts), "Blank/emst_2.vtk");
 }
 
+void test3()
+{
+	for (size_t i = 0; i < 50; ++i)
+	{
+		const auto pnts = Tools::generateSquarePoints(50000, 10);
+		makeEMST(pnts);
+		std::cout << i << std::endl;
+	}
+}
+
 int main()
 {
-	test2();
+	test3();
 	return 0;
 }
