@@ -2,6 +2,13 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <vector>
+#include <math.h>
+
+// Type definition.
+using uint = unsigned int;
+struct uint2 { uint i; uint j; };
+struct float2 { float x; float y; };
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -41,7 +48,7 @@ struct Box2DTools {
 
   /*! \brief Computing box containing every input points plus enlargement.
   */
-  static Box2D getBox(const std::vector<float2>& pnts, float enlarge)
+  static Box2D getBox(const std::vector<float2>& pnts, float enlarge);
 
   /*! \brief Check if a box contains a point.
   */
@@ -114,7 +121,7 @@ struct UnionFindTools {
 
   /*! \brief Creating union find structure.
   */
-  static UnionFind make(size_t nPts);
+  static UnionFind make(uint nPts);
 
   /*! \brief Finding parent of an associated node.
   */
@@ -144,7 +151,7 @@ struct AlgoTools {
 
   /* \brief Computing sampling deltas used to build the sampling graph.
   */
-  static float2 getSamplingDelta(const float2& dataBoxDelta, uint nPnts, uint stencilRadius = MIN_STENCIL_RADIUS)
+  static float2 getSamplingDelta(const float2& dataBoxDelta, uint nPnts, uint stencilRadius = MIN_STENCIL_RADIUS);
 
   /*
     \brief Computing the sampling graph associated to a set of points.
@@ -154,7 +161,7 @@ struct AlgoTools {
     \params nNeighbors is an estimation of the average number of neighbors of a point, typically used to avoid large number of reallocations.
     \returns The sampling graph associated to a set of points and computed using a specific sampling delta.
   */
-  static std::vector<uint2> getSamplingGraph(const QuadTree& tree, const std::vector<float2>& pnts, const float2& samplingDelta, size_t nNeighbors)
+  static std::vector<uint2> getSamplingGraph(const QuadTree& tree, const std::vector<float2>& pnts, const float2& samplingDelta, uint nNeighbors);
 
   /*
     \brief Attempt to apply Kruskal algorithm from an input graph.
@@ -162,14 +169,14 @@ struct AlgoTools {
     \param out is the set of edges forming the EMST computed using Kruskal's algorithm.
     \returns true if the algorithm was successfull.
   */
-  static bool applyKruskal(const std::vector<float2>& pnts, std::vector<uint2>& in, std::vector<uint2>& out)
+  static bool applyKruskal(const std::vector<float2>& pnts, std::vector<uint2>& in, std::vector<uint2>& out);
 
   /*
     \brief Computing EMST from an input set of points. This iterative algorithm
     is based upon the assumption that the points are uniformly distributed within
     a 2D box.
   */
-  static std::vector<uint2> makeEMST(const std::vector<float2>& pnts)
+  static std::vector<uint2> makeEMST(const std::vector<float2>& pnts);
 };
 
 
@@ -197,6 +204,46 @@ uint AlgoTools::getAverageNNeighbor(uint stencilRadius)
 // ---------------------------------------------------------------------------//
 
 // ---------------------------------------------------------------------------//
+float2 AlgoTools::getSamplingDelta(const float2& dataBoxDelta, uint nPnts, uint stencilRadius)
+{
+  const auto approxStep = (2.0f * dataBoxDelta.x) / sqrtf(float(nPnts));
+  return { stencilRadius * approxStep, stencilRadius * approxStep };
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+std::vector<uint2> AlgoTools::getSamplingGraph(const QuadTree& tree, const std::vector<float2>& pnts, const float2& samplingDelta, uint nNeighbors)
+{
+  // Reserving memory from estimation of the number of neighbors per point.
+  std::vector<uint2> samplingGraph;
+  samplingGraph.reserve(pnts.size() * nNeighbors);
+
+  // Creating sampling box centered on every point in loop.
+  Box2D samplingBox;
+  samplingBox.delta = samplingDelta;
+
+  // Loop on every points to extract neighbors from sampling box.
+  for (uint i = 0, ni = pnts.size(); i < ni; ++i)
+  {
+    // Centering sampling box on current point.
+    samplingBox.center = pnts[i];
+
+    // Extracting indexes of points inside the sampling box.
+    std::vector<uint> samplingNeighbours;
+	samplingNeighbours.reserve(nNeighbors);
+    QuadTreeTools::getPointIndexes(tree, pnts, samplingBox, samplingNeighbours);
+
+    // Creating edges from current point to every point in the sampling box.
+    for (const auto& idx : samplingNeighbours)
+      if (idx != i)
+        samplingGraph.push_back({ i, idx });
+  }
+
+  return samplingGraph;
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
 bool AlgoTools::applyKruskal(const std::vector<float2>& pnts, std::vector<uint2>& in, std::vector<uint2>& out)
 {
   // Sorting edges by square length.
@@ -208,7 +255,7 @@ bool AlgoTools::applyKruskal(const std::vector<float2>& pnts, std::vector<uint2>
 	auto uf = UnionFindTools::make(pnts.size());
 
   // Initializing loop variabales.
-	size_t ie = 0, je = 0, nie = in.size(), nje = pnts.size() - 1;
+	uint ie = 0, je = 0, nie = in.size(), nje = pnts.size() - 1;
 
   // Applying Kruskal's algorithm.
 	out.reserve(nje);
@@ -217,8 +264,8 @@ bool AlgoTools::applyKruskal(const std::vector<float2>& pnts, std::vector<uint2>
 
     // Extracting edge and associated sets.
 		const auto& e = in[ie];
-		const auto set0 = findParent(uf, e.i);
-		const auto set1 = findParent(uf, e.j);
+		const auto set0 = UnionFindTools::findParent(uf, e.i);
+		const auto set1 = UnionFindTools::findParent(uf, e.j);
 
     // Pushing edge into otuput graph only of it is not forming a cycle.
 		if (set0 != set1)
@@ -248,7 +295,7 @@ std::vector<uint2> AlgoTools::makeEMST(const std::vector<float2>& pnts)
 	const auto box = Box2DTools::getBox(pnts, 0.1);
 
   // Building quad tree.
-	const auto tree = QuadTreeTools::make(pnts, box, QuadTreeTools::getInitialIndexes(pnts.size()));
+	const auto tree = QuadTreeTools::make(box, pnts, QuadTreeTools::getInitialIndexes(pnts.size()));
 
   // Applying iterative algorithm.
 	bool success = false;
@@ -280,15 +327,175 @@ std::vector<uint2> AlgoTools::makeEMST(const std::vector<float2>& pnts)
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+// Implementations of Union - Find structure.
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// ---------------------------------------------------------------------------//
+UnionFind UnionFindTools::make(uint nPts)
+{
+  UnionFind uf;
+  uf.rank = std::vector<uint>(nPts, 0);
+  uf.parent = std::vector<uint>(nPts);
+  std::iota(uf.parent.begin(), uf.parent.end(), 0);
+  return uf;
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+uint UnionFindTools::findParent(UnionFind& uf, uint i)
+{
+  if (i != uf.parent[i]) uf.parent[i] = findParent(uf, uf.parent[i]);
+	return uf.parent[i];
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+void UnionFindTools::mergeByRank(UnionFind& uf, uint i, uint j)
+{
+  i = findParent(uf, i);
+  j = findParent(uf, j);
+
+  const auto rki = uf.rank[i];
+  const auto rkj = uf.rank[j];
+
+  if (rki > rkj) uf.parent[j] = i;
+  else uf.parent[i] = j;
+
+  if(rki == rkj) ++uf.rank[j];
+}
+// ---------------------------------------------------------------------------//
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Implementations of Quad tree tools.
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+// ---------------------------------------------------------------------------//
+QuadTree QuadTreeTools::make(const Box2D& box, const std::vector<float2>& pnts, std::vector<uint>&& idxs)
+{
+  QuadTree tree;
+
+  // Setting box associated to current leaf.
+  tree.box = box;
+
+  // By default, tree has no associated data point.
+  tree.hasData = false;
+
+	if (!idxs.empty())
+	{
+		if (idxs.size() == 1)
+		{
+			tree.hasData = true;
+			tree.dataIdx = idxs.front();
+		}
+		else
+		{
+			std::vector<uint> idxLB, idxRB, idxLT, idxRT;
+
+			for (uint i = 0, ni = idxs.size(); i < ni; ++i)
+			{
+        // Exrtracting position of current point.
+				const auto& p = pnts[idxs[i]];
+				const auto posX = p.x <= box.center.x ? PointPositionX::LEFT : PointPositionX::RIGHT;
+				const auto posY = p.y <= box.center.y ? PointPositionY::BOTTOM : PointPositionY::TOP;
+
+        // Assigning current index to one of the leaves in tree.
+				if (posX == PointPositionX::LEFT && posY == PointPositionY::BOTTOM) idxLB.push_back(idxs[i]);
+				else if (posX == PointPositionX::RIGHT && posY == PointPositionY::BOTTOM) idxRB.push_back(idxs[i]);
+				else if (posX == PointPositionX::LEFT && posY == PointPositionY::TOP) idxLT.push_back(idxs[i]);
+				else if (posX == PointPositionX::RIGHT && posY == PointPositionY::TOP) idxRT.push_back(idxs[i]);
+			}
+
+      // Clearing input index vector.
+      idxs.clear();
+
+      // Creating leaves boxes.
+      const float2 leafDelta = { 0.5f * box.delta.x, 0.5f * box.delta.y };
+      const auto boxLB = Box2D{ { box.center.x - leafDelta.x, box.center.y - leafDelta.y }, leafDelta };
+      const auto boxRB = Box2D{ { box.center.x + leafDelta.x, box.center.y - leafDelta.y }, leafDelta };
+      const auto boxLT = Box2D{ { box.center.x - leafDelta.x, box.center.y + leafDelta.y }, leafDelta };
+      const auto boxRT = Box2D{ { box.center.x + leafDelta.x, box.center.y + leafDelta.y }, leafDelta };
+
+      // Creating leaves.
+			tree.leaves.push_back(make(boxLB, pnts, std::move(idxLB)));
+			tree.leaves.push_back(make(boxRB, pnts, std::move(idxRB)));
+			tree.leaves.push_back(make(boxLT, pnts, std::move(idxLT)));
+			tree.leaves.push_back(make(boxRT, pnts, std::move(idxRT)));
+		}
+	}
+
+	return tree;
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+std::vector<uint> QuadTreeTools::getInitialIndexes(uint nPts)
+{
+  std::vector<uint> idx(nPts);
+  std::iota(idx.begin(), idx.end(), 0);
+  return idx;
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+void QuadTreeTools::getPointIndexes(const QuadTree& tree, const std::vector<float2>& pnts, const Box2D& box, std::vector<uint>& neighbours)
+{
+  if (tree.hasData)
+  {
+    if(Box2DTools::contains(box, pnts[tree.dataIdx]))
+      neighbours.push_back(tree.dataIdx);
+  }
+  else
+  {
+    if (!tree.leaves.empty())
+      for (const auto& leaf : tree.leaves)
+        if(Box2DTools::intersects(box, leaf.box))
+          getPointIndexes(leaf, pnts, box, neighbours);
+  }
+}
+// ---------------------------------------------------------------------------//
+
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-// Implementations of Union - Find structre.
+// Implementations of box tools.
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+
+// ---------------------------------------------------------------------------//
+Box2D Box2DTools::getBox(const std::vector<float2>& pnts, float enlarge)
+{
+  const auto minmaxX = std::minmax_element(pnts.begin(), pnts.end(), [](const float2& p, const float2& q) { return p.x < q.x; });
+  const auto minmaxY = std::minmax_element(pnts.begin(), pnts.end(), [](const float2& p, const float2& q) { return p.y < q.y; });
+  const auto step = std::max(minmaxX.second->x - minmaxX.first->x, minmaxX.second->y - minmaxX.first->y);
+
+  const float2 center = { 0.5f * (minmaxX.first->x + minmaxX.second->x), 0.5f * (minmaxY.first->y + minmaxY.second->y) };
+  const float2 delta = { 0.5f * step + enlarge,  0.5f * step + enlarge };
+
+  return { center, delta };
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+bool Box2DTools::contains(const Box2D& box, const float2& p)
+{
+  const auto vx = p.x - box.center.x;
+  const auto vy = p.y - box.center.y;
+  return fabs(vx) <= box.delta.x && fabs(vy) <= box.delta.y;
+}
+// ---------------------------------------------------------------------------//
+
+// ---------------------------------------------------------------------------//
+bool Box2DTools::intersects(const Box2D& box0, const Box2D& box1)
+{
+  const auto vx = box0.center.x - box1.center.x;
+  const auto vy = box0.center.y - box1.center.y;
+  const auto dx = box0.delta.x + box1.delta.x;
+  const auto dy = box0.delta.y + box1.delta.y;
+  return fabs(vx) <= dx && fabs(vy) <= dy;
+}
+// ---------------------------------------------------------------------------//
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -303,30 +510,21 @@ float Geom2DTools::getSquareDistance(const float2& p, const float2& q)
   const float dy = q.y - p.y;
   return dx * dx + dy * dy;
 }
-// ---------------------------------------------------------------------------//
 
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-// Implementations of box tools.
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
-// ---------------------------------------------------------------------------//
-bool Box2DTools::contains(const Box2D& box, const float2& p)
+void Geom2DTools::removeDoublons(std::vector<uint2>& edges)
 {
-  const auto vx = p.x - center.x;
-  const auto vy = p.y - center.y;
-  return fabs(vx) - delta.x <= 0. && fabs(vy) - delta.y <= 0.;
-}
-// ---------------------------------------------------------------------------//
+  for (auto& e : edges)
+    if (e.i > e.j)
+      std::swap(e.i, e.j);
 
-// ---------------------------------------------------------------------------//
-bool Box2DTools::intersects(const Box2D& box0, const Box2D& box1)
-{
-  const auto vx = box0.center.x - box1.center.x;
-  const auto vy = box0.center.y - box1.center.y;
-  const auto dx = box0.delta.x + box1.x;
-  const auto dy = box0.delta.y + box1.y;
-  return fabs(vx) <= dx && fabs(vy) <= dy;
+  std::sort(edges.begin(), edges.end(), [](const uint2& e0, const uint2& e1)
+  {
+    return e0.i < e1.i && e0.j < e1.j;
+  });
+
+  edges.erase(std::unique(edges.begin(), edges.end(), [](const uint2& e0, const uint2& e1)
+  {
+    return e0.i == e1.i && e0.j == e1.j;
+  }), edges.end());
 }
 // ---------------------------------------------------------------------------//
