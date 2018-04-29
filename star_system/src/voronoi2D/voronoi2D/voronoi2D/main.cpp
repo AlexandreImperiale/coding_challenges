@@ -42,14 +42,14 @@ std::vector<float2> generateSquarePoints(unsigned int nPts, float radius = 0.5)
 ////////////////////////////////////////////////////////////////////////////////////
 
 struct VEdge {
-	float p0x, p0y, p1x, p1y, tx, ty;
+	double p0x, p0y, p1x, p1y, tx, ty;
 	bool isHalfLine;
 	
-	VEdge(float a, float b, float c, float d)
+	VEdge(double a, double b, double c, double d)
 	: p0x(a), p0y(b), p1x(c), p1y(d), tx(c - a), ty(d - b), isHalfLine(false) {}
 	
-	VEdge(float a, float b, float c, float d, bool)
-	: p0x(a), p0y(b), p1x(0.f), p1y(0.f), tx(c), ty(d), isHalfLine(true) {}
+	VEdge(double a, double b, double c, double d, bool)
+	: p0x(a), p0y(b), p1x(0.), p1y(0.), tx(c), ty(d), isHalfLine(true) {}
 	
 };
 
@@ -113,7 +113,7 @@ static uint getNearestNeighbor(const VDiagram& diagram, const std::vector<float2
 ////////////////////////////////////////////////////////////////////////////////////
 
 static const uint AVERAGE_NEDGE_PER_CELL = 6;
-static const float REL_GEOM_EPS = 1e-6;
+static const double REL_GEOM_EPS = 1e-12;
 
 static VDiagram makeDiagram(const std::vector<float2>& pnts)
 {
@@ -129,26 +129,26 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		const float2& p1 = pnts[1];
 		const float2& p2 = pnts[2];
 		
-		float p0p1x = p1.x - p0.x;
-		float p0p1y = p1.y - p0.y;
-		float p0p2x = p2.x - p0.x;
-		float p0p2y = p2.y - p0.y;
-		float p1p2x = p2.x - p1.x;
-		float p1p2y = p2.y - p1.y;
+		double p0p1x = p1.x - p0.x;
+		double p0p1y = p1.y - p0.y;
+		double p0p2x = p2.x - p0.x;
+		double p0p2y = p2.y - p0.y;
+		double p1p2x = p2.x - p1.x;
+		double p1p2y = p2.y - p1.y;
 		
-		float b01x = 0.5 * (p0.x + p1.x);
-		float b01y = 0.5 * (p0.y + p1.y);
-		float b02x = 0.5 * (p0.x + p2.x);
-		float b02y = 0.5 * (p0.y + p2.y);
-		float b12x = 0.5 * (p1.x + p2.x);
-		float b12y = 0.5 * (p1.y + p2.y);
+		double b01x = 0.5 * (p0.x + p1.x);
+		double b01y = 0.5 * (p0.y + p1.y);
+		double b02x = 0.5 * (p0.x + p2.x);
+		double b02y = 0.5 * (p0.y + p2.y);
+		double b12x = 0.5 * (p1.x + p2.x);
+		double b12y = 0.5 * (p1.y + p2.y);
 		
-		float d = p0p1y * p0p2x - p0p1x * p0p2y;
-		float a = p0p2x * (b02x - b01x) + p0p2y * (b02y - b01y);
+		double d = p0p1y * p0p2x - p0p1x * p0p2y;
+		double a = p0p2x * (b02x - b01x) + p0p2y * (b02y - b01y);
 		a /= d;
-		float cx = b01x + a * p0p1y;
-		float cy = b01y - a * p0p1x;
-		float o = d > 0.f ? -1.0f : 1.0f;
+		double cx = b01x + a * p0p1y;
+		double cy = b01y - a * p0p1x;
+		double o = d > 0. ? -1.0 : 1.0;
 		
 		VCell c0, c1, c2;
 
@@ -174,9 +174,9 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 
 	// Declaration of algo variables.
 	uint c0, c0T, c1T, c0B, c1B, ie, ne;
-	bool A, B, foundT, foundB, reachedInitCell;
-	float bpx, bpy, bnx, bny, rx, ry, a, b, c;
-	float top0x, top0y, bot0x, bot0y, top1x, top1y, bot1x, bot1y;
+	bool A, B, C, foundT, foundB, reachedInitCell;
+	double bpx, bpy, bnx, bny, rx, ry, a, b, c;
+	double top0x, top0y, bot0x, bot0y, top1x, top1y, bot1x, bot1y;
 	
 	// Loop on points.
 	for(uint ip = 3; ip < np; ++ip)
@@ -668,7 +668,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 	ofs << "DATASET UNSTRUCTURED_GRID\n";
 	
 	// Writing points.
-	ofs << "POINTS " << 2 * nedge + pnts.size() << " double \n";
+	ofs << "POINTS " << 2 * nedge << " double \n";
 	for(const auto& cell : diagram.cells)
 		for(const auto& edge : cell.edges)
 		{
@@ -685,10 +685,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 			}
 		}
 	
-	for(const auto& p : pnts)
-		ofs << p.x << " " << p.y << " " << 0. << std::endl;
-	
-	// Writing triangles.
+	// Writing edges.
 	ofs << "CELLS " << nedge << " " << 3 * nedge << std::endl;
 	uint ip = 0;
 	for(const auto& cell : diagram.cells)
@@ -706,6 +703,43 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 	ofs.close();
 }
 
+/*!
+ \brief Writing edges into VTK file.
+ \params pnts are the points coordinates in the graph.
+ \params edges are the set of edges linking points in graph.
+ */
+static void writeDual(const VDiagram& diagram, const std::vector<float2>& pnts, const std::string& fileName)
+{
+	std::ofstream ofs(fileName);
+	
+	// Writing header.
+	ofs << "# vtk DataFile Version 2.0\n";
+	ofs << "Voronoi 2D\n";
+	ofs << "ASCII\n";
+	ofs << "DATASET UNSTRUCTURED_GRID\n";
+	
+	// Writing points.
+	ofs << "POINTS " << pnts.size() << " double \n";
+	for(const auto& p : pnts)
+		ofs << p.x << " " << p.y << " " << 0. << std::endl;
+	
+	uint nedge = 0;
+	for(const auto& cell : diagram.cells)
+		nedge += cell.edges.size();
+	
+	// Writing edges.
+	ofs << "CELLS " << nedge << " " << 3 * nedge << std::endl;
+	for (size_t i = 0, ni = diagram.cells.size(); i < ni; ++i)
+		for (size_t j = 0, nj = diagram.cells[i].neighbors.size(); j < nj; ++j)
+			ofs << 2 << " " << i << " " << diagram.cells[i].neighbors[j] << std::endl;
+	
+	// Writing cell types.
+	ofs << "CELL_TYPES " << nedge << std::endl;
+	for (size_t i = 0; i < nedge; ++i) ofs << 3 << std::endl;
+	
+	// Closing file.
+	ofs.close();
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
@@ -713,7 +747,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 
 int main() {
 	
-	const auto pnts = generateSquarePoints(200);
+	const auto pnts = generateSquarePoints(1000);
 	/*const std::vector<float2> pnts = {
 		{0.0f, 0.0f},
 		{1.0f, 0.0f},
@@ -723,6 +757,7 @@ int main() {
 	};*/
 	const auto diagram = makeDiagram(pnts);
 	write(diagram, pnts, "voronoi_dbg.vtk");
+	writeDual(diagram, pnts, "delaunay_dbg.vtk");
 
 	return 0;
 }
