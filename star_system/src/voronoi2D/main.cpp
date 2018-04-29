@@ -74,24 +74,20 @@ static void write(const std::vector<float2>& pnts, const std::vector<uint2>& edg
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
-struct Bisector {
-	float2 p, dir;
-};
-
 struct VEdge {
 	float2 p0, p1;
-	float2 normal;
+	float2 tangent;
+	bool isHalfLine;
 };
 
 struct VCell {
 
-	uint generator;
+	uint generator, ne0, ne1;
+	
+	std::vector<uint> neighbors0, neighbors1;
+	
+	std::vector<VEdge> edges0, edges1;
 
-	std::vector<uint> neighbors;
-
-	std::vector<VEdge> edges;
-
-	// WARNING : edges.size() == neighbors.size() !!!
 };
 
 struct VDiagram {
@@ -103,12 +99,7 @@ struct VDiagram {
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
-static Bisector makeBisector(const float2& p, const float2& q)
-{
-	return {};
-}
-
-static bool intersect(const Bisector& bisect, const VEdge& edge)
+static bool intersect(const float2& p, const float2& normal, const VEdge& edge)
 {
 	return false;
 }
@@ -150,34 +141,6 @@ static uint getNearestNeighbor(const VDiagram& diagram, const std::vector<float2
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
-
-/*!
-	\brief Cutting a cell using a bisector. Since every cell are convex, the number of intersection points are 1 or 2.
-	\return the index of the neighboring cell at intersection point.
-*/
-static std::vector<uint> cutCell(VCell& cell, const Bisector& bisector)
-{
-
-	// use : Check if previous edges are above edge between intersection points !
-	// 
-}
-
-static void addGenerator(VDiagram& diagram, const std::vector<float2>& generators, uint idx)
-{
-	const auto jdx = getNearestNeighbor(diagram, generators, idx);
-
-	// Computing bisector between p & q.
-
-	// Intersecting every edges in jdx cell.
-
-	// Creating new edge in jdx cell and new cell.
-
-	// Extracting neighbors of jdx cell at intersection points.
-
-	// For every neighbors that have not yet been cut, add them to candidates stack.
-}
-
-
 
 
 

@@ -1,0 +1,23 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "DCEA64BD9D100C662A71CBCAAEDB31EB7559EC62",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "DCEA64BD9D100C662A71CBCAAEDB31EB7559EC62" : 0
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "85816DC7-35C7-4C9E-A086-10F106BDC1C5",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "DCEA64BD9D100C662A71CBCAAEDB31EB7559EC62" : "coding_challenges\/"
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "voronoi2D",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "star_system\/src\/voronoi2D\/voronoi2D\/voronoi2D.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/github.com\/AlexandreImperiale\/coding_challenges.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "DCEA64BD9D100C662A71CBCAAEDB31EB7559EC62"
+    }
+  ]
+}
