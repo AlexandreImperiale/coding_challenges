@@ -83,9 +83,9 @@ struct VEdge {
 struct VCell {
 
 	uint generator, ne0, ne1;
-	
+
 	std::vector<uint> neighbors0, neighbors1;
-	
+
 	std::vector<VEdge> edges0, edges1;
 
 };

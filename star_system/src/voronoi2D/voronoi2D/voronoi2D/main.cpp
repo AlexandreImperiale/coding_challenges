@@ -69,16 +69,11 @@ struct VCell {
 	}
 };
 
-struct VDiagram {
-	
-	std::vector<VCell> cells;
-};
-
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
-static uint getNearestNeighbor(const VDiagram& diagram, const std::vector<float2>& generators, uint idx, uint guess = 0)
+static uint getNearestNeighbor(const std::vector<VCell>& diagram, const std::vector<float2>& generators, uint idx, uint guess = 0)
 {
 	const auto& p = generators[idx];
 	
@@ -91,7 +86,7 @@ static uint getNearestNeighbor(const VDiagram& diagram, const std::vector<float2
 		found = true;
 		auto di = squareDistance(p, generators[i]);
 		
-		for (auto j : diagram.cells[i].neighbors)
+		for (auto j : diagram[i].neighbors)
 		{
 			auto dj = squareDistance(p, generators[j]);
 			if (dj < di)
@@ -112,70 +107,78 @@ static uint getNearestNeighbor(const VDiagram& diagram, const std::vector<float2
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
+static void initDiagram(const std::vector<float2>& pnts, std::vector<VCell>& diagram)
+{
+	const size_t np = pnts.size();
+	
+	/// Initializing diagram.
+	diagram.reserve(np);
+	
+	// Initializing first three cells.
+	const float2& p0 = pnts[0];
+	const float2& p1 = pnts[1];
+	const float2& p2 = pnts[2];
+	
+	double p0p1x = p1.x - p0.x;
+	double p0p1y = p1.y - p0.y;
+	double p0p2x = p2.x - p0.x;
+	double p0p2y = p2.y - p0.y;
+	double p1p2x = p2.x - p1.x;
+	double p1p2y = p2.y - p1.y;
+	
+	double b01x = 0.5 * (p0.x + p1.x);
+	double b01y = 0.5 * (p0.y + p1.y);
+	double b02x = 0.5 * (p0.x + p2.x);
+	double b02y = 0.5 * (p0.y + p2.y);
+	
+	double d = p0p1y * p0p2x - p0p1x * p0p2y;
+	double a = p0p2x * (b02x - b01x) + p0p2y * (b02y - b01y);
+	a /= d;
+	double cx = b01x + a * p0p1y;
+	double cy = b01y - a * p0p1x;
+	double o = d > 0. ? 1.0 : -1.0;
+	
+	VCell c0, c1, c2;
+	
+	c0.edges.emplace_back(cx, cy, -o * p0p1y, o * p0p1x, true);
+	c0.edges.emplace_back(cx, cy, o * p0p2y, -o * p0p2x, true);
+	c0.neighbors.push_back(1);
+	c0.neighbors.push_back(2);
+	
+	c1.edges.emplace_back(cx, cy, -o * p0p1y, o * p0p1x, true);
+	c1.edges.emplace_back(cx, cy, -o * p1p2y, o * p1p2x, true);
+	c1.neighbors.push_back(0);
+	c1.neighbors.push_back(2);
+	
+	c2.edges.emplace_back(cx, cy, o * p0p2y, -o * p0p2x, true);
+	c2.edges.emplace_back(cx, cy, -o * p1p2y, o * p1p2x, true);
+	c2.neighbors.push_back(0);
+	c2.neighbors.push_back(1);
+	
+	diagram.push_back(std::move(c0));
+	diagram.push_back(std::move(c1));
+	diagram.push_back(std::move(c2));
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
 static const uint AVERAGE_NEDGE_PER_CELL = 6;
 static const double REL_GEOM_EPS = 1e-12;
 
-static VDiagram makeDiagram(const std::vector<float2>& pnts)
+static std::vector<VCell> makeDiagram(const std::vector<float2>& pnts)
 {
 	const uint np = pnts.size();
 	
 	// Initializing diagram.
-	VDiagram diagram;
-	diagram.cells.reserve(np);
+	std::vector<VCell> diagram;
+	initDiagram(pnts, diagram);
 	
-	// Initializing first three cells.
-	{
-		const float2& p0 = pnts[0];
-		const float2& p1 = pnts[1];
-		const float2& p2 = pnts[2];
-		
-		double p0p1x = p1.x - p0.x;
-		double p0p1y = p1.y - p0.y;
-		double p0p2x = p2.x - p0.x;
-		double p0p2y = p2.y - p0.y;
-		double p1p2x = p2.x - p1.x;
-		double p1p2y = p2.y - p1.y;
-		
-		double b01x = 0.5 * (p0.x + p1.x);
-		double b01y = 0.5 * (p0.y + p1.y);
-		double b02x = 0.5 * (p0.x + p2.x);
-		double b02y = 0.5 * (p0.y + p2.y);
-		double b12x = 0.5 * (p1.x + p2.x);
-		double b12y = 0.5 * (p1.y + p2.y);
-		
-		double d = p0p1y * p0p2x - p0p1x * p0p2y;
-		double a = p0p2x * (b02x - b01x) + p0p2y * (b02y - b01y);
-		a /= d;
-		double cx = b01x + a * p0p1y;
-		double cy = b01y - a * p0p1x;
-		double o = d > 0. ? -1.0 : 1.0;
-		
-		VCell c0, c1, c2;
-
-		c0.edges.emplace_back(cx, cy, -d * p0p1y, d * p0p1x, true);
-		c0.edges.emplace_back(cx, cy, d * p0p2y, -d * p0p2x, true);
-		c0.neighbors.push_back(1);
-		c0.neighbors.push_back(2);
-		
-		c1.edges.emplace_back(cx, cy, -d * p0p1y, d * p0p1x, true);
-		c1.edges.emplace_back(cx, cy, -d * p1p2y, d * p1p2x, true);
-		c1.neighbors.push_back(0);
-		c1.neighbors.push_back(2);
-		
-		c2.edges.emplace_back(cx, cy, d * p0p2y, -d * p0p2x, true);
-		c2.edges.emplace_back(cx, cy, -d * p1p2y, d * p1p2x, true);
-		c2.neighbors.push_back(0);
-		c2.neighbors.push_back(1);
-		
-		diagram.cells.push_back(std::move(c0));
-		diagram.cells.push_back(std::move(c1));
-		diagram.cells.push_back(std::move(c2));
-	}
-
 	// Declaration of algo variables.
 	uint c0, c0T, c1T, c0B, c1B, ie, ne;
 	bool A, B, C, foundT, foundB, reachedInitCell;
-	double bpx, bpy, bnx, bny, rx, ry, a, b, c;
+	double bpx, bpy, bnx, bny, rx, ry, a, b, c, d, na, nb, nd, n0, dx0, dy0, dx1, dy1;
 	double top0x, top0y, bot0x, bot0y, top1x, top1y, bot1x, bot1y;
 	
 	// Loop on points.
@@ -192,7 +195,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		/////////////////////////////////////////////
 		/////////////////////////////////////////////
 
-		const VCell& cell0 = diagram.cells[c0];
+		const VCell& cell0 = diagram[c0];
 		
 		VCell newCell0;
 		newCell0.edges.reserve(AVERAGE_NEDGE_PER_CELL);
@@ -213,120 +216,165 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 			
 			if(e.isHalfLine)
 			{
-				a = bnx * (e.p0x - bpx) + bny * (e.p0y - bpy);
+				dx0 = e.p0x - bpx;
+				dy0 = e.p0y - bpy;
+				n0 = bnx * bnx + bny * bny;
+				
+				a = bnx * dx0 + bny * dy0;
+				na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
+				
 				b = e.tx * bnx + e.ty * bny;
-				c = 1.0f / (bnx * bnx + bny * bny);
+				nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
 				
-				A = a * c > REL_GEOM_EPS;
-				B = b * c > REL_GEOM_EPS;
+				A = (a / na) > REL_GEOM_EPS;
+				B = (b / nb) > REL_GEOM_EPS;
+				C = (fabs(b) / nb) > REL_GEOM_EPS;
 				
-				if(A && B)
+				if((A && B) || (A && !C))
 				{
 					newCell0.edges.push_back(e);
 					newCell0.neighbors.push_back(cell0.neighbors[ie]);
 				}
-				else if(A && !B)
+				else if(C)
 				{
-					a /= b;
-					rx = e.p0x - a * e.tx;
-					ry = e.p0y - a * e.ty;
-					
-					if( (bnx * (ry - bpy) - bny * (rx - bpx)) * c > REL_GEOM_EPS)
+					if(A && !B)
 					{
-						top0x = rx; top0y = ry;
-						c0T = cell0.neighbors[ie];
-						foundT = true;
+						a /= b;
+						rx = e.p0x - a * e.tx;
+						ry = e.p0y - a * e.ty;
+						
+						dx0 = (rx - bpx);
+						dy0 = (ry - bpy);
+						a = bnx * dy0 - bny * dx0;
+						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // *
+						
+						if((a / na) > REL_GEOM_EPS)
+						{
+							top0x = rx; top0y = ry;
+							c0T = cell0.neighbors[ie];
+							foundT = true;
+						}
+						else
+						{
+							bot0x = rx; bot0y = ry;
+							c0B = cell0.neighbors[ie];
+							foundB = true;
+						}
+						
+						newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+						newCell0.neighbors.push_back(cell0.neighbors[ie]);
 					}
-					else
+					else if(!A && B)
 					{
-						bot0x = rx; bot0y = ry;
-						c0B = cell0.neighbors[ie];
-						foundB = true;
+						a /= b;
+						rx = e.p0x - a * e.tx;
+						ry = e.p0y - a * e.ty;
+						
+						dx0 = (rx - bpx);
+						dy0 = (ry - bpy);
+						a = bnx * dy0 - bny * dx0;
+						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // **
+						
+						if((a / na) > REL_GEOM_EPS)
+						{
+							top0x = rx; top0y = ry;
+							c0T = cell0.neighbors[ie];
+							foundT = true;
+						}
+						else
+						{
+							bot0x = rx; bot0y = ry;
+							c0B = cell0.neighbors[ie];
+							foundB = true;
+						}
+						
+						newCell0.edges.emplace_back(rx, ry, e.tx, e.ty, true);
+						newCell0.neighbors.push_back(cell0.neighbors[ie]);
 					}
-					
-					newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
-				}
-				else if(!A && B)
-				{
-					a /= b;
-					rx = e.p0x - a * e.tx;
-					ry = e.p0y - a * e.ty;
-					
-					if( (bnx * (ry - bpy) - bny * (rx - bpx)) * c > REL_GEOM_EPS)
-					{
-						top0x = rx; top0y = ry;
-						c0T = cell0.neighbors[ie];
-						foundT = true;
-					}
-					else
-					{
-						bot0x = rx; bot0y = ry;
-						c0B = cell0.neighbors[ie];
-						foundB = true;
-					}
-					
-					newCell0.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
 				}
 			}
 			else
 			{
-				a = bnx * (e.p0x - bpx) + bny * (e.p0y - bpy);
-				b = bnx * (e.p1x - bpx) + bny * (e.p1y - bpy);
-				c = 1.0f / (bnx * bnx + bny * bny);
+				dx0 = e.p0x - bpx;
+				dy0 = e.p0y - bpy;
+				dx1 = e.p1x - bpx;
+				dy1 = e.p1y - bpy;
+				n0 = bnx * bnx + bny * bny;
 				
-				A = a * c > REL_GEOM_EPS;
-				B = b * c > REL_GEOM_EPS;
+				a = bnx * dx0 + bny * dy0;
+				na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
 				
-				if (A && B)
+				b = bnx * dx1 + bny * dy1;
+				nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
+				
+				d = e.tx * bnx + e.ty * bny;
+				nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
+				
+				A = (a / na) > REL_GEOM_EPS;
+				B = (b / nb) > REL_GEOM_EPS;
+				C = (fabs(d) / nd) > REL_GEOM_EPS;
+				
+				if ((A && B) || (A && !C))
 				{
 					newCell0.edges.push_back(e);
 					newCell0.neighbors.push_back(cell0.neighbors[ie]);
 				}
-				else if(A && !B)
+				else if(C)
 				{
-					a /= e.tx * bnx + e.ty * bny;
-					rx = e.p0x - a * e.tx;
-					ry = e.p0y - a * e.ty;
-					
-					if( (bnx * (ry - bpy) - bny * (rx - bpx)) * c > REL_GEOM_EPS)
+					if(A && !B)
 					{
-						top0x = rx; top0y = ry;
-						c0T = cell0.neighbors[ie];
-						foundT = true;
+						a /= d;
+						rx = e.p0x - a * e.tx;
+						ry = e.p0y - a * e.ty;
+						
+						dx0 = (rx - bpx);
+						dy0 = (ry - bpy);
+						a = bnx * dy0 - bny * dx0;
+						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // ***
+						
+						if((a / na) > REL_GEOM_EPS)
+						{
+							top0x = rx; top0y = ry;
+							c0T = cell0.neighbors[ie];
+							foundT = true;
+						}
+						else
+						{
+							bot0x = rx; bot0y = ry;
+							c0B = cell0.neighbors[ie];
+							foundB = true;
+						}
+						
+						newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+						newCell0.neighbors.push_back(cell0.neighbors[ie]);
 					}
-					else
+					else if(!A && B)
 					{
-						bot0x = rx; bot0y = ry;
-						c0B = cell0.neighbors[ie];
-						foundB = true;
+						a /= d;
+						rx = e.p0x - a * e.tx;
+						ry = e.p0y - a * e.ty;
+						
+						dx0 = (rx - bpx);
+						dy0 = (ry - bpy);
+						a = bnx * dy0 - bny * dx0;
+						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // ****
+						
+						if((a / na) > REL_GEOM_EPS)
+						{
+							top0x = rx; top0y = ry;
+							c0T = cell0.neighbors[ie];
+							foundT = true;
+						}
+						else
+						{
+							bot0x = rx; bot0y = ry;
+							c0B = cell0.neighbors[ie];
+							foundB = true;
+						}
+						
+						newCell0.edges.emplace_back(rx, ry, e.p1x, e.p1y);
+						newCell0.neighbors.push_back(cell0.neighbors[ie]);
 					}
-					
-					newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
-				}
-				else if(!A && B)
-				{
-					a /= e.tx * bnx + e.ty * bny;
-					rx = e.p0x - a * e.tx;
-					ry = e.p0y - a * e.ty;
-					
-					if( (bnx * (ry - bpy) - bny * (rx - bpx)) * c > REL_GEOM_EPS)
-					{
-						top0x = rx; top0y = ry;
-						c0T = cell0.neighbors[ie];
-						foundT = true;
-					}
-					else
-					{
-						bot0x = rx; bot0y = ry;
-						c0B = cell0.neighbors[ie];
-						foundB = true;
-					}
-					
-					newCell0.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
 				}
 			}
 		}
@@ -349,7 +397,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		
 		newCell.neighbors.push_back(c0);
 		newCell0.neighbors.push_back(ip);
-		diagram.cells[c0] = std::move(newCell0);
+		diagram[c0] = std::move(newCell0);
 		
 		// TOP LOOP /////////////////////////////////
 		/////////////////////////////////////////////
@@ -357,7 +405,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		
 		while (foundT && !reachedInitCell)
 		{
-			const VCell& cellT = diagram.cells[c0T];
+			const VCell& cellT = diagram[c0T];
 			
 			VCell newCellT;
 			newCellT.edges.reserve(AVERAGE_NEDGE_PER_CELL);
@@ -375,96 +423,153 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 				
 				if(e.isHalfLine)
 				{
-					a = bnx * (e.p0x - top0x) + bny * (e.p0y - top0y);
+					dx0 = e.p0x - top0x;
+					dy0 = e.p0y - top0y;
+					n0 = bnx * bnx + bny * bny;
+					
+					a = bnx * dx0 + bny * dy0;
+					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
+					
 					b = e.tx * bnx + e.ty * bny;
-					c = 1.0f / (bnx * bnx + bny * bny);
+					nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
 					
-					A = a * c > REL_GEOM_EPS;
-					B = b * c > REL_GEOM_EPS;
-					
-					if (A && B)
+					A = (a / na) > REL_GEOM_EPS;
+					B = (b / nb) > REL_GEOM_EPS;
+					C = (fabs(b) / nb) > REL_GEOM_EPS;
+
+					if ((A && B) || (A && !C))
 					{
 						newCellT.edges.push_back(e);
 						newCellT.neighbors.push_back(cellT.neighbors[ie]);
 					}
-					else if(A && !B)
+					else if(C)
 					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bnx * (ry - top0y) - bny * (rx - top0x)) * c > REL_GEOM_EPS)
+						if(A && !B)
 						{
-							top1x = rx; top1y = ry;
-							c1T = cellT.neighbors[ie];
-							foundT = true;
+							a /= b;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - top0x);
+							dy0 = (ry - top0y);
+							
+							// a = bnx * dy0 - bny * dx0;
+							// na = 1.0; // std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; // std::sqrt(top0x * top0x + top0y * top0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								top1x = rx; top1y = ry;
+								c1T = cellT.neighbors[ie];
+								foundT = true;
+							}
+							
+							newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+							newCellT.neighbors.push_back(cellT.neighbors[ie]);
 						}
-
-						newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bnx * (ry - top0y) - bny * (rx - top0x)) * c > REL_GEOM_EPS)
+						else if(!A && B)
 						{
-							top1x = rx; top1y = ry;
-							c1T = cellT.neighbors[ie];
-							foundT = true;
+							a /= b;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - top0x);
+							dy0 = (ry - top0y);
+							
+							// a = bnx * dy0 - bny * dx0;
+							// na = 1.0; // std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; // std::sqrt(top0x * top0x + top0y * top0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								top1x = rx; top1y = ry;
+								c1T = cellT.neighbors[ie];
+								foundT = true;
+							}
+							
+							newCellT.edges.emplace_back(rx, ry, e.tx, e.ty, true);
+							newCellT.neighbors.push_back(cellT.neighbors[ie]);
 						}
-						
-						newCellT.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
 					}
 				}
 				else
 				{
-					a = bnx * (e.p0x - top0x) + bny * (e.p0y - top0y);
-					b = bnx * (e.p1x - top0x) + bny * (e.p1y - top0y);
-					c = 1.0f / (bnx * bnx + bny * bny);
+					dx0 = e.p0x - top0x;
+					dy0 = e.p0y - top0y;
+					dx1 = e.p1x - top0x;
+					dy1 = e.p1y - top0y;
+					n0 = bnx * bnx + bny * bny;
 					
-					A = a * c > REL_GEOM_EPS;
-					B = b * c > REL_GEOM_EPS;
+					a = bnx * dx0 + bny * dy0;
+					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
 					
-					if (A && B)
+					b = bnx * dx1 + bny * dy1;
+					nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
+					
+					d = e.tx * bnx + e.ty * bny;
+					nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
+					
+					A = (a / na) > REL_GEOM_EPS;
+					B = (b / nb) > REL_GEOM_EPS;
+					C = (fabs(d) / nd) > REL_GEOM_EPS;
+
+					if ((A && B) || (A && !C))
 					{
 						newCellT.edges.push_back(e);
 						newCellT.neighbors.push_back(cellT.neighbors[ie]);
 					}
-					else if(A && !B)
+					else if(C)
 					{
-						a /= e.tx * bnx + e.ty * bny;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bnx * (ry - top0y) - bny * (rx - top0x)) * c > REL_GEOM_EPS)
+						if(A && !B)
 						{
-							top1x = rx; top1y = ry;
-							c1T = cellT.neighbors[ie];
-							foundT = true;
+							a /= d;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - top0x);
+							dy0 = (ry - top0y);
+							
+							//a = bnx * dy0 - bny * dx0;
+							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(top0x * top0x + top0y * top0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								top1x = rx; top1y = ry;
+								c1T = cellT.neighbors[ie];
+								foundT = true;
+							}
+							
+							newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+							newCellT.neighbors.push_back(cellT.neighbors[ie]);
 						}
-						
-						newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= e.tx * bnx + e.ty * bny;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bnx * (ry - top0y) - bny * (rx - top0x)) * c > REL_GEOM_EPS)
+						else if(!A && B)
 						{
-							top1x = rx; top1y = ry;
-							c1T = cellT.neighbors[ie];
-							foundT = true;
+							a /= d;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - top0x);
+							dy0 = (ry - top0y);
+							
+							//a = bnx * dy0 - bny * dx0;
+							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(top0x * top0x + top0y * top0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								top1x = rx; top1y = ry;
+								c1T = cellT.neighbors[ie];
+								foundT = true;
+							}
+							
+							newCellT.edges.emplace_back(rx, ry, e.p1x, e.p1y);
+							newCellT.neighbors.push_back(cellT.neighbors[ie]);
 						}
-						
-						newCellT.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
 					}
 				}
 			}
@@ -473,7 +578,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 			{
 				newCellT.edges.emplace_back(top0x, top0y, top1x, top1y);
 				newCellT.neighbors.push_back(ip);
-				diagram.cells[c0T] = std::move(newCellT);
+				diagram[c0T] = std::move(newCellT);
 				
 				newCell.edges.emplace_back(top0x, top0y, top1x, top1y);
 				newCell.neighbors.push_back(c0T);
@@ -488,7 +593,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 			{
 				newCellT.edges.emplace_back(top0x, top0y, -bny, bnx, true);
 				newCellT.neighbors.push_back(ip);
-				diagram.cells[c0T] = std::move(newCellT);
+				diagram[c0T] = std::move(newCellT);
 				
 				newCell.edges.emplace_back(top0x, top0y, -bny, bnx, true);
 				newCell.neighbors.push_back(c0T);
@@ -501,7 +606,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		
 		while (foundB && !reachedInitCell)
 		{
-			const VCell& cellB = diagram.cells[c0B];
+			const VCell& cellB = diagram[c0B];
 			
 			VCell newCellB;
 			newCellB.edges.reserve(AVERAGE_NEDGE_PER_CELL);
@@ -519,96 +624,154 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 				
 				if(e.isHalfLine)
 				{
-					a = bnx * (e.p0x - bot0x) + bny * (e.p0y - bot0y);
+					dx0 = e.p0x - bot0x;
+					dy0 = e.p0y - bot0y;
+					n0 = bnx * bnx + bny * bny;
+					
+					a = bnx * dx0 + bny * dy0;
+					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
+					
 					b = e.tx * bnx + e.ty * bny;
-					c = 1.0f / (bnx * bnx + bny * bny);
+					nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
 					
-					A = a * c > REL_GEOM_EPS;
-					B = b * c > REL_GEOM_EPS;
-					
-					if (A && B)
+					A = (a / na) > REL_GEOM_EPS;
+					B = (b / nb) > REL_GEOM_EPS;
+					C = (fabs(b) / nb) > REL_GEOM_EPS;
+
+					if ((A && B) || (A && !C))
 					{
 						newCellB.edges.push_back(e);
 						newCellB.neighbors.push_back(cellB.neighbors[ie]);
 					}
-					else if(A && !B)
+					else if(C)
 					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bny * (rx - bot0x) - bnx * (ry - bot0y)) * c > REL_GEOM_EPS)
+						if(A && !B)
 						{
-							bot1x = rx; bot1y = ry;
-							c1B = cellB.neighbors[ie];
-							foundB = true;
+							a /= b;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - bot0x);
+							dy0 = (ry - bot0y);
+							
+							//a = bny * dx0 - bnx * dy0;
+							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								bot1x = rx; bot1y = ry;
+								c1B = cellB.neighbors[ie];
+								foundB = true;
+							}
+							
+							newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+							newCellB.neighbors.push_back(cellB.neighbors[ie]);
 						}
-						
-						newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bny * (rx - bot0x) - bnx * (ry - bot0y)) * c > REL_GEOM_EPS)
+						else if(!A && B)
 						{
-							bot1x = rx; bot1y = ry;
-							c1B = cellB.neighbors[ie];
-							foundB = true;
+							a /= b;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - bot0x);
+							dy0 = (ry - bot0y);
+							
+							// a = bny * dx0 - bnx * dy0;
+							// na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								bot1x = rx; bot1y = ry;
+								c1B = cellB.neighbors[ie];
+								foundB = true;
+							}
+							
+							newCellB.edges.emplace_back(rx, ry, e.tx, e.ty, true);
+							newCellB.neighbors.push_back(cellB.neighbors[ie]);
 						}
-						
-						newCellB.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
 					}
 				}
 				else
 				{
-					a = bnx * (e.p0x - bot0x) + bny * (e.p0y - bot0y);
-					b = bnx * (e.p1x - bot0x) + bny * (e.p1y - bot0y);
-					c = 1.0f / (bnx * bnx + bny * bny);
+					dx0 = e.p0x - bot0x;
+					dy0 = e.p0y - bot0y;
+					dx1 = e.p1x - bot0x;
+					dy1 = e.p1y - bot0y;
+					n0 = bnx * bnx + bny * bny;
 					
-					A = a * c > REL_GEOM_EPS;
-					B = b * c > REL_GEOM_EPS;
+					a = bnx * dx0 + bny * dy0;
+					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
 					
-					if (A && B)
+					b = bnx * dx1 + bny * dy1;
+					nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
+					
+					d = e.tx * bnx + e.ty * bny;
+					nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
+					
+					A = (a / na) > REL_GEOM_EPS;
+					B = (b / nb) > REL_GEOM_EPS;
+					C = (fabs(d) / nd) > REL_GEOM_EPS;
+					
+					if ((A && B) || (A && !C))
 					{
 						newCellB.edges.push_back(e);
 						newCellB.neighbors.push_back(cellB.neighbors[ie]);
 					}
-					else if(A && !B)
+					else if(C)
 					{
-						a /= e.tx * bnx + e.ty * bny;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bny * (rx - bot0x) - bnx * (ry - bot0y)) * c > REL_GEOM_EPS)
+						if(A && !B)
 						{
-							bot1x = rx; bot1y = ry;
-							c1B = cellB.neighbors[ie];
-							foundB = true;
+							a /= d;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - bot0x);
+							dy0 = (ry - bot0y);
+							
+							//a = bny * dx0 - bnx * dy0;
+							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								bot1x = rx; bot1y = ry;
+								c1B = cellB.neighbors[ie];
+								foundB = true;
+							}
+							
+							newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
+							newCellB.neighbors.push_back(cellB.neighbors[ie]);
 						}
-						
-						newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= e.tx * bnx + e.ty * bny;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						if( (bny * (rx - bot0x) - bnx * (ry - bot0y)) * c > REL_GEOM_EPS)
+						else if(!A && B)
 						{
-							bot1x = rx; bot1y = ry;
-							c1B = cellB.neighbors[ie];
-							foundB = true;
+							a /= d;
+							rx = e.p0x - a * e.tx;
+							ry = e.p0y - a * e.ty;
+							
+							dx0 = (rx - bot0x);
+							dy0 = (ry - bot0y);
+							
+							//a = bny * dx0 - bnx * dy0;
+							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
+							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
+							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
+							
+							if((a / na) > REL_GEOM_EPS)
+							{
+								bot1x = rx; bot1y = ry;
+								c1B = cellB.neighbors[ie];
+								foundB = true;
+							}
+							
+							newCellB.edges.emplace_back(rx, ry, e.p1x, e.p1y);
+							newCellB.neighbors.push_back(cellB.neighbors[ie]);
 						}
-						
-						newCellB.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
 					}
 				}
 			}
@@ -617,7 +780,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 			{
 				newCellB.edges.emplace_back(bot0x, bot0y, bot1x, bot1y);
 				newCellB.neighbors.push_back(ip);
-				diagram.cells[c0B] = std::move(newCellB);
+				diagram[c0B] = std::move(newCellB);
 				
 				newCell.edges.emplace_back(bot0x, bot0y, bot1x, bot1y);
 				newCell.neighbors.push_back(c0B);
@@ -631,7 +794,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 			{
 				newCellB.edges.emplace_back(bot0x, bot0y, bny, -bnx, true);
 				newCellB.neighbors.push_back(ip);
-				diagram.cells[c0B] = std::move(newCellB);
+				diagram[c0B] = std::move(newCellB);
 				
 				newCell.edges.emplace_back(bot0x, bot0y, bny, -bnx, true);
 				newCell.neighbors.push_back(c0B);
@@ -642,7 +805,7 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
 		////////////////////////////////////////////////////////////////////
 		////////////////////////////////////////////////////////////////////
 		
-		diagram.cells.push_back(std::move(newCell));
+		diagram.push_back(std::move(newCell));
 	}
 	
 	return diagram;
@@ -653,12 +816,12 @@ static VDiagram makeDiagram(const std::vector<float2>& pnts)
  \params pnts are the points coordinates in the graph.
  \params edges are the set of edges linking points in graph.
  */
-static void write(const VDiagram& diagram, const std::vector<float2>& pnts, const std::string& fileName, float HalfLineDistance = 2.0)
+static void write(const std::vector<VCell>& diagram, const std::vector<float2>& pnts, const std::string& fileName, float HalfLineDistance = 2.0)
 {
 	std::ofstream ofs(fileName);
 	
 	uint nedge = 0;
-	for(const auto& cell : diagram.cells)
+	for(const auto& cell : diagram)
 		nedge += cell.edges.size();
 	
 	// Writing header.
@@ -669,7 +832,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 	
 	// Writing points.
 	ofs << "POINTS " << 2 * nedge << " double \n";
-	for(const auto& cell : diagram.cells)
+	for(const auto& cell : diagram)
 		for(const auto& edge : cell.edges)
 		{
 			if(edge.isHalfLine)
@@ -688,7 +851,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
 	// Writing edges.
 	ofs << "CELLS " << nedge << " " << 3 * nedge << std::endl;
 	uint ip = 0;
-	for(const auto& cell : diagram.cells)
+	for(const auto& cell : diagram)
 		for(const auto& edge : cell.edges)
 		{
 			ofs << 2 << " " << ip << " " << ip + 1 << std::endl;
@@ -708,7 +871,7 @@ static void write(const VDiagram& diagram, const std::vector<float2>& pnts, cons
  \params pnts are the points coordinates in the graph.
  \params edges are the set of edges linking points in graph.
  */
-static void writeDual(const VDiagram& diagram, const std::vector<float2>& pnts, const std::string& fileName)
+static void writeDual(const std::vector<VCell>& diagram, const std::vector<float2>& pnts, const std::string& fileName)
 {
 	std::ofstream ofs(fileName);
 	
@@ -724,14 +887,14 @@ static void writeDual(const VDiagram& diagram, const std::vector<float2>& pnts, 
 		ofs << p.x << " " << p.y << " " << 0. << std::endl;
 	
 	uint nedge = 0;
-	for(const auto& cell : diagram.cells)
+	for(const auto& cell : diagram)
 		nedge += cell.edges.size();
 	
 	// Writing edges.
 	ofs << "CELLS " << nedge << " " << 3 * nedge << std::endl;
-	for (size_t i = 0, ni = diagram.cells.size(); i < ni; ++i)
-		for (size_t j = 0, nj = diagram.cells[i].neighbors.size(); j < nj; ++j)
-			ofs << 2 << " " << i << " " << diagram.cells[i].neighbors[j] << std::endl;
+	for (size_t i = 0, ni = diagram.size(); i < ni; ++i)
+		for (size_t j = 0, nj = diagram[i].neighbors.size(); j < nj; ++j)
+			ofs << 2 << " " << i << " " << diagram[i].neighbors[j] << std::endl;
 	
 	// Writing cell types.
 	ofs << "CELL_TYPES " << nedge << std::endl;
@@ -747,18 +910,27 @@ static void writeDual(const VDiagram& diagram, const std::vector<float2>& pnts, 
 
 int main() {
 	
-	const auto pnts = generateSquarePoints(1000);
+	// const auto pnts = generateSquarePoints(500);
 	/*const std::vector<float2> pnts = {
 		{0.0f, 0.0f},
 		{1.0f, 0.0f},
 		{0.0f, 1.0f},
 		{1.0f, -0.5f},
-		{0.9f, 0.25f},
-	};*/
+		{1.0f, 0.25f},
+	};
 	const auto diagram = makeDiagram(pnts);
 	write(diagram, pnts, "voronoi_dbg.vtk");
-	writeDual(diagram, pnts, "delaunay_dbg.vtk");
-
+	writeDual(diagram, pnts, "delaunay_dbg.vtk");*/
+	
+	for(size_t i = 0; i < 100; ++i)
+	{
+		const auto pnts = generateSquarePoints(50000);
+		// const auto pnts = generateSquarePoints(50);
+		const auto diagram = makeDiagram(pnts);
+		std::cout << i << std::endl;
+		//write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
+	}
+	
 	return 0;
 }
 
