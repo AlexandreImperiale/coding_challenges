@@ -185,8 +185,9 @@ static void cutCell(
 	
 	double bnx = q.x - p.x;
 	double bny = q.y - p.y;
+	double nbn2 = bnx * bnx + bny * bny;
 	
-	double a, b, c;
+	double dx, dy, a, b, c, na, nb, nc;
 	bool A, B;
 	size_t ie0;
 	
@@ -198,13 +199,18 @@ static void cutCell(
 		
 		if(e.isHalfLine)
 		{
-			a = (e.p0x - bpx) * bnx + (e.p0y - bpy) * bny;
+			dx = e.p0x - bpx;
+			dy = e.p0y - bpy;
+			a = dx * bnx + dy * bny;
+			na = std::sqrt(nbn2 * (dx * dx + dy * dy));
+			
 			b = e.tx * bnx + e.ty * bny;
+			nb = std::sqrt(nbn2 * (e.tx * e.tx + e.ty * e.ty));
 			
-			A = a > GEOM_EPS;
-			B = b > GEOM_EPS;
+			A = a / na > GEOM_EPS;
+			B = b / nb > GEOM_EPS;
 			
-			if(fabs(b) < GEOM_EPS)
+			if(fabs(b) / nb < GEOM_EPS)
 			{
 				if(A)
 				{
@@ -275,14 +281,23 @@ static void cutCell(
 		}
 		else
 		{
-			a = (e.p0x - bpx) * bnx + (e.p0y - bpy) * bny;
-			b = (e.p1x - bpx) * bnx + (e.p1y - bpy) * bny;
+			dx = e.p0x - bpx;
+			dy = e.p0y - bpy;
+			a = dx * bnx + dy * bny;
+			na = std::sqrt(nbn2 * (dx * dx + dy * dy));
+			
+			dx = e.p1x - bpx;
+			dy = e.p1y - bpy;
+			b = dx * bnx + dy * bny;
+			nb = std::sqrt(nbn2 * (dx * dx + dy * dy));
+			
 			c = e.tx * bnx + e.ty * bny;
+			nc = std::sqrt(nbn2 * (bnx * bnx + bny * bny));
 			
-			A = a > GEOM_EPS;
-			B = b > GEOM_EPS;
+			A = a / na > GEOM_EPS;
+			B = b / nb > GEOM_EPS;
 			
-			if(fabs(c) < GEOM_EPS)
+			if(fabs(c) / nc < GEOM_EPS)
 			{
 				if(A)
 				{
@@ -361,8 +376,19 @@ static void cutCell(
 	else
 	{
 		const auto& edge0 = cell.edges[ie0];
-		A = (edge0.ty * (q.x - edge0.p0x) - edge0.tx * (q.y - edge0.p0y)) > GEOM_EPS;
-		B = edge0.ty * bny + edge0.tx * bnx > GEOM_EPS;
+		
+		nc = edge0.ty * edge0.ty + edge0.tx * edge0.tx;
+		
+		dx = q.x - edge0.p0x;
+		dy = q.y - edge0.p0y;
+		a = edge0.ty * dx - edge0.tx * dy;
+		na = std::sqrt(nc * (dx * dx + dy * dy));
+		
+		b = edge0.ty * bny + edge0.tx * bnx;
+		nb = std::sqrt(nc * nbn2);
+		
+		A = a / na > GEOM_EPS;
+		B = b / nb > GEOM_EPS;
 		
 		if(A == B)
 		{
@@ -619,11 +645,11 @@ int main() {
 	
 	for(size_t i = 0; i < 100; ++i)
 	{
-		const auto pnts = generateSquarePoints(10, 1e-5);
+		const auto pnts = generateSquarePoints(50000);
 		// const auto pnts = generateSquarePoints(50);
 		const auto diagram = makeDiagram(pnts);
 		std::cout << i << std::endl;
-		write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
+		// write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
 	}
 	
 	return 0;

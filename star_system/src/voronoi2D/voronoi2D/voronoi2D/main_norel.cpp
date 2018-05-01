@@ -619,11 +619,11 @@ int main() {
 	
 	for(size_t i = 0; i < 100; ++i)
 	{
-		const auto pnts = generateSquarePoints(10, 1e-5);
+		const auto pnts = generateSquarePoints(50000);
 		// const auto pnts = generateSquarePoints(50);
 		const auto diagram = makeDiagram(pnts);
 		std::cout << i << std::endl;
-		write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
+		// write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
 	}
 	
 	return 0;
