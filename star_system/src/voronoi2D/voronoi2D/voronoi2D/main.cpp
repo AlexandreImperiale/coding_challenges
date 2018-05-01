@@ -53,13 +53,24 @@ struct VEdge {
 	
 };
 
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
+static const uint AVERAGE_NEDGE_PER_CELL = 6;
+
 struct VCell {
 	
 	std::vector<uint> neighbors;
 	
 	std::vector<VEdge> edges;
 	
-	VCell() = default;
+	VCell()
+	{
+		neighbors.reserve(AVERAGE_NEDGE_PER_CELL);
+		edges.reserve(AVERAGE_NEDGE_PER_CELL);
+	}
+	
 	VCell(VCell&& cell) : neighbors(std::move(cell.neighbors)), edges(std::move(cell.edges)) {}
 	VCell& operator=(VCell&& cell)
 	{
@@ -109,12 +120,6 @@ static uint getNearestNeighbor(const std::vector<VCell>& diagram, const std::vec
 
 static void initDiagram(const std::vector<float2>& pnts, std::vector<VCell>& diagram)
 {
-	const size_t np = pnts.size();
-	
-	/// Initializing diagram.
-	diagram.reserve(np);
-	
-	// Initializing first three cells.
 	const float2& p0 = pnts[0];
 	const float2& p1 = pnts[1];
 	const float2& p2 = pnts[2];
@@ -138,7 +143,9 @@ static void initDiagram(const std::vector<float2>& pnts, std::vector<VCell>& dia
 	double cy = b01y - a * p0p1x;
 	double o = d > 0. ? 1.0 : -1.0;
 	
-	VCell c0, c1, c2;
+	auto& c0 = diagram[0];
+	auto& c1 = diagram[1];
+	auto& c2 = diagram[2];
 	
 	c0.edges.emplace_back(cx, cy, -o * p0p1y, o * p0p1x, true);
 	c0.edges.emplace_back(cx, cy, o * p0p2y, -o * p0p2x, true);
@@ -154,668 +161,343 @@ static void initDiagram(const std::vector<float2>& pnts, std::vector<VCell>& dia
 	c2.edges.emplace_back(cx, cy, -o * p1p2y, o * p1p2x, true);
 	c2.neighbors.push_back(0);
 	c2.neighbors.push_back(1);
-	
-	diagram.push_back(std::move(c0));
-	diagram.push_back(std::move(c1));
-	diagram.push_back(std::move(c2));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////
 
-static const uint AVERAGE_NEDGE_PER_CELL = 6;
-static const double REL_GEOM_EPS = 1e-12;
+static const double GEOM_EPS = 1e-12;
+
+struct CutResult {
+	double rx0, ry0, rx1, ry1;
+	uint nei0, nei1;
+	bool found0, found1;
+};
+
+static void cutCell(
+		double bpx, double bpy,
+		uint cellIdx, 			VCell& cell, 		const float2& q,
+		uint cuttingCellIdx, 	VCell& cuttingCell, const float2& p,
+		CutResult& cutResult)
+{
+	VCell newCell;
+	
+	double bnx = q.x - p.x;
+	double bny = q.y - p.y;
+	
+	double a, b, c;
+	bool A, B;
+	
+	cutResult.found0 = cutResult.found1 = false;
+	
+	for(size_t ie = 0, ne = cell.edges.size(); ie < ne; ++ie)
+	{
+		const VEdge& e = cell.edges[ie];
+		
+		if(e.isHalfLine)
+		{
+			a = (e.p0x - bpx) * bnx + (e.p0y - bpy) * bny;
+			b = e.tx * bnx + e.ty * bny;
+			
+			A = a > GEOM_EPS;
+			B = b > GEOM_EPS;
+			
+			if(fabs(b) < GEOM_EPS)
+			{
+				if(A)
+				{
+					newCell.edges.push_back(e);
+					newCell.neighbors.push_back(cell.neighbors[ie]);
+				}
+			}
+			else
+			{
+				if(A && B)
+				{
+					newCell.edges.push_back(e);
+					newCell.neighbors.push_back(cell.neighbors[ie]);
+				}
+				else if(A && !B)
+				{
+					a /= b;
+					
+					if(cutResult.found0)
+					{
+						cutResult.rx1 = e.p0x - a * e.tx;
+						cutResult.ry1 = e.p0y - a * e.ty;
+						cutResult.nei1 = cell.neighbors[ie];
+						cutResult.found1 = true;
+						
+						newCell.edges.emplace_back(e.p0x, e.p0y, cutResult.rx1, cutResult.ry1);
+						newCell.neighbors.push_back(cutResult.nei1);
+					}
+					else
+					{
+						cutResult.rx0 = e.p0x - a * e.tx;
+						cutResult.ry0 = e.p0y - a * e.ty;
+						cutResult.nei0 = cell.neighbors[ie];
+						cutResult.found0 = true;
+						
+						newCell.edges.emplace_back(e.p0x, e.p0y, cutResult.rx0, cutResult.ry0);
+						newCell.neighbors.push_back(cutResult.nei0);
+					}
+				}
+				else if(!A && B)
+				{
+					a /= b;
+					
+					if(cutResult.found0)
+					{
+						cutResult.rx1 = e.p0x - a * e.tx;
+						cutResult.ry1 = e.p0y - a * e.ty;
+						cutResult.nei1 = cell.neighbors[ie];
+						cutResult.found1 = true;
+						
+						newCell.edges.emplace_back(cutResult.rx1, cutResult.ry1, e.tx, e.ty, true);
+						newCell.neighbors.push_back(cutResult.nei1);
+					}
+					else
+					{
+						cutResult.rx0 = e.p0x - a * e.tx;
+						cutResult.ry0 = e.p0y - a * e.ty;
+						cutResult.nei0 = cell.neighbors[ie];
+						cutResult.found0 = true;
+						
+						newCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, e.tx, e.ty, true);
+						newCell.neighbors.push_back(cutResult.nei0);
+					}
+				}
+			}
+		}
+		else
+		{
+			a = (e.p0x - bpx) * bnx + (e.p0y - bpy) * bny;
+			b = (e.p1x - bpx) * bnx + (e.p1y - bpy) * bny;
+			c = e.tx * bnx + e.ty * bny;
+			
+			A = a > GEOM_EPS;
+			B = b > GEOM_EPS;
+			
+			if(fabs(c) < GEOM_EPS)
+			{
+				if(A)
+				{
+					newCell.edges.push_back(e);
+					newCell.neighbors.push_back(cell.neighbors[ie]);
+				}
+			}
+			else
+			{
+				if(A && B)
+				{
+					newCell.edges.push_back(e);
+					newCell.neighbors.push_back(cell.neighbors[ie]);
+				}
+				else if(A && !B)
+				{
+					a /= c;
+					
+					if(cutResult.found0)
+					{
+						cutResult.rx1 = e.p0x - a * e.tx;
+						cutResult.ry1 = e.p0y - a * e.ty;
+						cutResult.nei1 = cell.neighbors[ie];
+						cutResult.found1 = true;
+						
+						newCell.edges.emplace_back(e.p0x, e.p0y, cutResult.rx1, cutResult.ry1);
+						newCell.neighbors.push_back(cutResult.nei1);
+					}
+					else
+					{
+						cutResult.rx0 = e.p0x - a * e.tx;
+						cutResult.ry0 = e.p0y - a * e.ty;
+						cutResult.nei0 = cell.neighbors[ie];
+						cutResult.found0 = true;
+						
+						newCell.edges.emplace_back(e.p0x, e.p0y, cutResult.rx0, cutResult.ry0);
+						newCell.neighbors.push_back(cutResult.nei0);
+					}
+				}
+				else if(!A && B)
+				{
+					a /= c;
+					
+					if(cutResult.found0)
+					{
+						cutResult.rx1 = e.p0x - a * e.tx;
+						cutResult.ry1 = e.p0y - a * e.ty;
+						cutResult.nei1 = cell.neighbors[ie];
+						cutResult.found1 = true;
+						
+						newCell.edges.emplace_back(cutResult.rx1, cutResult.ry1, e.p1x, e.p1y);
+						newCell.neighbors.push_back(cutResult.nei1);
+					}
+					else
+					{
+						cutResult.rx0 = e.p0x - a * e.tx;
+						cutResult.ry0 = e.p0y - a * e.ty;
+						cutResult.nei0 = cell.neighbors[ie];
+						cutResult.found0 = true;
+						
+						newCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, e.p1x, e.p1y);
+						newCell.neighbors.push_back(cutResult.nei0);
+					}
+				}
+			}
+		}
+	}
+
+	if(cutResult.found1)
+	{
+		cuttingCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, cutResult.rx1, cutResult.ry1);
+		newCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, cutResult.rx1, cutResult.ry1);
+	}
+	else
+	{
+		if(/*TO DO !*/ false)
+		{
+			cuttingCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, bny, -bnx, true);
+			newCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, bny, -bnx, true);
+		}
+		else
+		{
+			cuttingCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, -bny, bnx, true);
+			newCell.edges.emplace_back(cutResult.rx0, cutResult.ry0, -bny, bnx, true);
+		}
+	}
+	
+	newCell.neighbors.push_back(cuttingCellIdx);
+	cuttingCell.neighbors.push_back(cellIdx);
+	
+	cell = std::move(newCell);
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
+static void analyzeCutResult(const CutResult& cutRes1, uint& currentCell, uint& nextCell, double& rx, double& ry)
+{
+	if(cutRes1.found0)
+	{
+		if(cutRes1.found1)
+		{
+			if(cutRes1.nei1 == currentCell)
+			{
+				currentCell = nextCell;
+				nextCell = cutRes1.nei0;
+				rx = cutRes1.rx0;
+				ry = cutRes1.ry0;
+			}
+			else
+			{
+				currentCell = nextCell;
+				nextCell = cutRes1.nei1;
+				rx = cutRes1.rx1;
+				ry = cutRes1.ry1;
+			}
+		}
+		else
+			if (cutRes1.nei0 != currentCell)
+				throw std::exception(); // Irrelevant cut result !
+	}
+	else throw std::exception(); // Can't cut cell !
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
 
 static std::vector<VCell> makeDiagram(const std::vector<float2>& pnts)
 {
-	const uint np = pnts.size();
+	// Allocating cells in diagram.
+	const size_t np = pnts.size();
+	std::vector<VCell> diagram;
+	diagram.resize(np);
 	
 	// Initializing diagram.
-	std::vector<VCell> diagram;
 	initDiagram(pnts, diagram);
 	
-	// Declaration of algo variables.
-	uint c0, c0T, c1T, c0B, c1B, ie, ne;
-	bool A, B, C, foundT, foundB, reachedInitCell;
-	double bpx, bpy, bnx, bny, rx, ry, a, b, c, d, na, nb, nd, n0, dx0, dy0, dx1, dy1;
-	double top0x, top0y, bot0x, bot0y, top1x, top1y, bot1x, bot1y;
+	// Declartion of cut results.
+	CutResult cutRes0, cutRes1;
+	uint currentCell, nextCell;
+	double rx, ry;
 	
 	// Loop on points.
 	for(uint ip = 3; ip < np; ++ip)
 	{
-		VCell newCell;
-		newCell.edges.reserve(AVERAGE_NEDGE_PER_CELL);
-		newCell.neighbors.reserve(AVERAGE_NEDGE_PER_CELL);
+		// Reference to current cutting cell.
+		auto& cuttingCell = diagram[ip];
 		
 		// Extracting nearest cell.
-		c0 = getNearestNeighbor(diagram, pnts, ip);
+		auto c0 = getNearestNeighbor(diagram, pnts, ip);
 		
-		// INIT /////////////////////////////////////
-		/////////////////////////////////////////////
-		/////////////////////////////////////////////
-
-		const VCell& cell0 = diagram[c0];
-		
-		VCell newCell0;
-		newCell0.edges.reserve(AVERAGE_NEDGE_PER_CELL);
-		newCell0.neighbors.reserve(AVERAGE_NEDGE_PER_CELL);
-		
+		// Cutting first cell.
 		const float2& p = pnts[ip];
 		const float2& q = pnts[c0];
+		cutCell(
+			0.5 * (q.x + p.x), 	// bpx
+			0.5 * (q.y + p.y), 	// bpy
+			c0, diagram[c0], q,
+			ip, cuttingCell, p,
+			cutRes0);
 		
-		bpx = 0.5 * (q.x + p.x);
-		bpy = 0.5 * (q.y + p.y);
-		bnx = q.x - p.x;
-		bny = q.y - p.y;
-		foundT = foundB = reachedInitCell = false;
+		currentCell = c0;
+		nextCell = cutRes0.nei0;
 		
-		for(ie = 0, ne = cell0.edges.size(); ie < ne; ++ie)
+		// Propagating through first cutting point.
+		if(cutRes0.found0)
 		{
-			const VEdge& e = cell0.edges[ie];
+			rx = cutRes0.rx0;
+			ry = cutRes0.ry0;
 			
-			if(e.isHalfLine)
+			do
 			{
-				dx0 = e.p0x - bpx;
-				dy0 = e.p0y - bpy;
-				n0 = bnx * bnx + bny * bny;
+				cutCell(
+					rx, ry,
+					nextCell, diagram[nextCell], pnts[nextCell],
+					ip, cuttingCell, p,
+					cutRes1);
 				
-				a = bnx * dx0 + bny * dy0;
-				na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
+				analyzeCutResult(cutRes1, currentCell, nextCell, rx, ry);
 				
-				b = e.tx * bnx + e.ty * bny;
-				nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-				
-				A = (a / na) > REL_GEOM_EPS;
-				B = (b / nb) > REL_GEOM_EPS;
-				C = (fabs(b) / nb) > REL_GEOM_EPS;
-				
-				if((A && B) || (A && !C))
-				{
-					newCell0.edges.push_back(e);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
-				}
-				else if(C)
-				{
-					if(A && !B)
-					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						dx0 = (rx - bpx);
-						dy0 = (ry - bpy);
-						a = bnx * dy0 - bny * dx0;
-						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // *
-						
-						if((a / na) > REL_GEOM_EPS)
-						{
-							top0x = rx; top0y = ry;
-							c0T = cell0.neighbors[ie];
-							foundT = true;
-						}
-						else
-						{
-							bot0x = rx; bot0y = ry;
-							c0B = cell0.neighbors[ie];
-							foundB = true;
-						}
-						
-						newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCell0.neighbors.push_back(cell0.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= b;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						dx0 = (rx - bpx);
-						dy0 = (ry - bpy);
-						a = bnx * dy0 - bny * dx0;
-						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // **
-						
-						if((a / na) > REL_GEOM_EPS)
-						{
-							top0x = rx; top0y = ry;
-							c0T = cell0.neighbors[ie];
-							foundT = true;
-						}
-						else
-						{
-							bot0x = rx; bot0y = ry;
-							c0B = cell0.neighbors[ie];
-							foundB = true;
-						}
-						
-						newCell0.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-						newCell0.neighbors.push_back(cell0.neighbors[ie]);
-					}
-				}
-			}
-			else
-			{
-				dx0 = e.p0x - bpx;
-				dy0 = e.p0y - bpy;
-				dx1 = e.p1x - bpx;
-				dy1 = e.p1y - bpy;
-				n0 = bnx * bnx + bny * bny;
-				
-				a = bnx * dx0 + bny * dy0;
-				na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
-				
-				b = bnx * dx1 + bny * dy1;
-				nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
-				
-				d = e.tx * bnx + e.ty * bny;
-				nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-				
-				A = (a / na) > REL_GEOM_EPS;
-				B = (b / nb) > REL_GEOM_EPS;
-				C = (fabs(d) / nd) > REL_GEOM_EPS;
-				
-				if ((A && B) || (A && !C))
-				{
-					newCell0.edges.push_back(e);
-					newCell0.neighbors.push_back(cell0.neighbors[ie]);
-				}
-				else if(C)
-				{
-					if(A && !B)
-					{
-						a /= d;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						dx0 = (rx - bpx);
-						dy0 = (ry - bpy);
-						a = bnx * dy0 - bny * dx0;
-						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // ***
-						
-						if((a / na) > REL_GEOM_EPS)
-						{
-							top0x = rx; top0y = ry;
-							c0T = cell0.neighbors[ie];
-							foundT = true;
-						}
-						else
-						{
-							bot0x = rx; bot0y = ry;
-							c0B = cell0.neighbors[ie];
-							foundB = true;
-						}
-						
-						newCell0.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-						newCell0.neighbors.push_back(cell0.neighbors[ie]);
-					}
-					else if(!A && B)
-					{
-						a /= d;
-						rx = e.p0x - a * e.tx;
-						ry = e.p0y - a * e.ty;
-						
-						dx0 = (rx - bpx);
-						dy0 = (ry - bpy);
-						a = bnx * dy0 - bny * dx0;
-						na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // ****
-						
-						if((a / na) > REL_GEOM_EPS)
-						{
-							top0x = rx; top0y = ry;
-							c0T = cell0.neighbors[ie];
-							foundT = true;
-						}
-						else
-						{
-							bot0x = rx; bot0y = ry;
-							c0B = cell0.neighbors[ie];
-							foundB = true;
-						}
-						
-						newCell0.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-						newCell0.neighbors.push_back(cell0.neighbors[ie]);
-					}
-				}
-			}
+			} while(cutRes1.found1 && nextCell != c0);
 		}
 		
-		if(!foundT)
+		// Propagating through second cutting point.
+		if(cutRes0.found1 && nextCell != c0)
 		{
-			newCell0.edges.emplace_back(bot0x, bot0y, -bny, bnx, true);
-			newCell.edges.emplace_back(bot0x, bot0y, -bny, bnx, true);
+			currentCell = c0;
+			nextCell = cutRes0.nei1;
+			rx = cutRes0.rx1;
+			ry = cutRes0.ry1;
+			
+			do
+			{
+				cutCell(
+					rx, ry,
+					nextCell, diagram[nextCell], pnts[nextCell],
+					ip, cuttingCell, p,
+					cutRes1);
+				
+				analyzeCutResult(cutRes1, currentCell, nextCell, rx, ry);
+				
+			} while(cutRes1.found1 && nextCell != c0);
 		}
-		else if(!foundB)
-		{
-			newCell0.edges.emplace_back(top0x, top0y, bny, -bnx, true);
-			newCell.edges.emplace_back(top0x, top0y, bny, -bnx, true);
-		}
-		else
-		{
-			newCell0.edges.emplace_back(bot0x, bot0y, top0x, top0y);
-			newCell.edges.emplace_back(bot0x, bot0y, top0x, top0y);
-		}
-		
-		newCell.neighbors.push_back(c0);
-		newCell0.neighbors.push_back(ip);
-		diagram[c0] = std::move(newCell0);
-		
-		// TOP LOOP /////////////////////////////////
-		/////////////////////////////////////////////
-		/////////////////////////////////////////////
-		
-		while (foundT && !reachedInitCell)
-		{
-			const VCell& cellT = diagram[c0T];
-			
-			VCell newCellT;
-			newCellT.edges.reserve(AVERAGE_NEDGE_PER_CELL);
-			newCellT.neighbors.reserve(AVERAGE_NEDGE_PER_CELL);
-			
-			const float2& q = pnts[c0T];
-			
-			bnx = q.x - p.x;
-			bny = q.y - p.y;
-			foundT = false;
-			
-			for(ie = 0, ne = cellT.edges.size(); ie < ne; ++ie)
-			{
-				const VEdge& e = cellT.edges[ie];
-				
-				if(e.isHalfLine)
-				{
-					dx0 = e.p0x - top0x;
-					dy0 = e.p0y - top0y;
-					n0 = bnx * bnx + bny * bny;
-					
-					a = bnx * dx0 + bny * dy0;
-					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
-					
-					b = e.tx * bnx + e.ty * bny;
-					nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-					
-					A = (a / na) > REL_GEOM_EPS;
-					B = (b / nb) > REL_GEOM_EPS;
-					C = (fabs(b) / nb) > REL_GEOM_EPS;
-
-					if ((A && B) || (A && !C))
-					{
-						newCellT.edges.push_back(e);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
-					}
-					else if(C)
-					{
-						if(A && !B)
-						{
-							a /= b;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - top0x);
-							dy0 = (ry - top0y);
-							
-							// a = bnx * dy0 - bny * dx0;
-							// na = 1.0; // std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; // std::sqrt(top0x * top0x + top0y * top0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								top1x = rx; top1y = ry;
-								c1T = cellT.neighbors[ie];
-								foundT = true;
-							}
-							
-							newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-							newCellT.neighbors.push_back(cellT.neighbors[ie]);
-						}
-						else if(!A && B)
-						{
-							a /= b;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - top0x);
-							dy0 = (ry - top0y);
-							
-							// a = bnx * dy0 - bny * dx0;
-							// na = 1.0; // std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; // std::sqrt(top0x * top0x + top0y * top0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								top1x = rx; top1y = ry;
-								c1T = cellT.neighbors[ie];
-								foundT = true;
-							}
-							
-							newCellT.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-							newCellT.neighbors.push_back(cellT.neighbors[ie]);
-						}
-					}
-				}
-				else
-				{
-					dx0 = e.p0x - top0x;
-					dy0 = e.p0y - top0y;
-					dx1 = e.p1x - top0x;
-					dy1 = e.p1y - top0y;
-					n0 = bnx * bnx + bny * bny;
-					
-					a = bnx * dx0 + bny * dy0;
-					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
-					
-					b = bnx * dx1 + bny * dy1;
-					nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
-					
-					d = e.tx * bnx + e.ty * bny;
-					nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-					
-					A = (a / na) > REL_GEOM_EPS;
-					B = (b / nb) > REL_GEOM_EPS;
-					C = (fabs(d) / nd) > REL_GEOM_EPS;
-
-					if ((A && B) || (A && !C))
-					{
-						newCellT.edges.push_back(e);
-						newCellT.neighbors.push_back(cellT.neighbors[ie]);
-					}
-					else if(C)
-					{
-						if(A && !B)
-						{
-							a /= d;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - top0x);
-							dy0 = (ry - top0y);
-							
-							//a = bnx * dy0 - bny * dx0;
-							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(top0x * top0x + top0y * top0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								top1x = rx; top1y = ry;
-								c1T = cellT.neighbors[ie];
-								foundT = true;
-							}
-							
-							newCellT.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-							newCellT.neighbors.push_back(cellT.neighbors[ie]);
-						}
-						else if(!A && B)
-						{
-							a /= d;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - top0x);
-							dy0 = (ry - top0y);
-							
-							//a = bnx * dy0 - bny * dx0;
-							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(top0x * top0x + top0y * top0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								top1x = rx; top1y = ry;
-								c1T = cellT.neighbors[ie];
-								foundT = true;
-							}
-							
-							newCellT.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-							newCellT.neighbors.push_back(cellT.neighbors[ie]);
-						}
-					}
-				}
-			}
-			
-			if(foundT)
-			{
-				newCellT.edges.emplace_back(top0x, top0y, top1x, top1y);
-				newCellT.neighbors.push_back(ip);
-				diagram[c0T] = std::move(newCellT);
-				
-				newCell.edges.emplace_back(top0x, top0y, top1x, top1y);
-				newCell.neighbors.push_back(c0T);
-				
-				reachedInitCell = c1T == c0;
-				c0T = c1T;
-				top0x = top1x;
-				top0y = top1y;
-				
-			}
-			else
-			{
-				newCellT.edges.emplace_back(top0x, top0y, -bny, bnx, true);
-				newCellT.neighbors.push_back(ip);
-				diagram[c0T] = std::move(newCellT);
-				
-				newCell.edges.emplace_back(top0x, top0y, -bny, bnx, true);
-				newCell.neighbors.push_back(c0T);
-			}
-		}
-		
-		// BOTTOM LOOP //////////////////////////////
-		/////////////////////////////////////////////
-		/////////////////////////////////////////////
-		
-		while (foundB && !reachedInitCell)
-		{
-			const VCell& cellB = diagram[c0B];
-			
-			VCell newCellB;
-			newCellB.edges.reserve(AVERAGE_NEDGE_PER_CELL);
-			newCellB.neighbors.reserve(AVERAGE_NEDGE_PER_CELL);
-			
-			const float2& q = pnts[c0B];
-			
-			bnx = q.x - p.x;
-			bny = q.y - p.y;
-			foundB = false;
-			
-			for(ie = 0, ne = cellB.edges.size(); ie < ne; ++ie)
-			{
-				const VEdge& e = cellB.edges[ie];
-				
-				if(e.isHalfLine)
-				{
-					dx0 = e.p0x - bot0x;
-					dy0 = e.p0y - bot0y;
-					n0 = bnx * bnx + bny * bny;
-					
-					a = bnx * dx0 + bny * dy0;
-					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
-					
-					b = e.tx * bnx + e.ty * bny;
-					nb = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-					
-					A = (a / na) > REL_GEOM_EPS;
-					B = (b / nb) > REL_GEOM_EPS;
-					C = (fabs(b) / nb) > REL_GEOM_EPS;
-
-					if ((A && B) || (A && !C))
-					{
-						newCellB.edges.push_back(e);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
-					}
-					else if(C)
-					{
-						if(A && !B)
-						{
-							a /= b;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - bot0x);
-							dy0 = (ry - bot0y);
-							
-							//a = bny * dx0 - bnx * dy0;
-							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								bot1x = rx; bot1y = ry;
-								c1B = cellB.neighbors[ie];
-								foundB = true;
-							}
-							
-							newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-							newCellB.neighbors.push_back(cellB.neighbors[ie]);
-						}
-						else if(!A && B)
-						{
-							a /= b;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - bot0x);
-							dy0 = (ry - bot0y);
-							
-							// a = bny * dx0 - bnx * dy0;
-							// na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								bot1x = rx; bot1y = ry;
-								c1B = cellB.neighbors[ie];
-								foundB = true;
-							}
-							
-							newCellB.edges.emplace_back(rx, ry, e.tx, e.ty, true);
-							newCellB.neighbors.push_back(cellB.neighbors[ie]);
-						}
-					}
-				}
-				else
-				{
-					dx0 = e.p0x - bot0x;
-					dy0 = e.p0y - bot0y;
-					dx1 = e.p1x - bot0x;
-					dy1 = e.p1y - bot0y;
-					n0 = bnx * bnx + bny * bny;
-					
-					a = bnx * dx0 + bny * dy0;
-					na = std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0));
-					
-					b = bnx * dx1 + bny * dy1;
-					nb = std::sqrt(n0 * (dx1 * dx1 + dy1 * dy1));
-					
-					d = e.tx * bnx + e.ty * bny;
-					nd = std::sqrt(n0 * (e.tx * e.tx + e.ty * e.ty));
-					
-					A = (a / na) > REL_GEOM_EPS;
-					B = (b / nb) > REL_GEOM_EPS;
-					C = (fabs(d) / nd) > REL_GEOM_EPS;
-					
-					if ((A && B) || (A && !C))
-					{
-						newCellB.edges.push_back(e);
-						newCellB.neighbors.push_back(cellB.neighbors[ie]);
-					}
-					else if(C)
-					{
-						if(A && !B)
-						{
-							a /= d;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - bot0x);
-							dy0 = (ry - bot0y);
-							
-							//a = bny * dx0 - bnx * dy0;
-							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								bot1x = rx; bot1y = ry;
-								c1B = cellB.neighbors[ie];
-								foundB = true;
-							}
-							
-							newCellB.edges.emplace_back(e.p0x, e.p0y, rx, ry);
-							newCellB.neighbors.push_back(cellB.neighbors[ie]);
-						}
-						else if(!A && B)
-						{
-							a /= d;
-							rx = e.p0x - a * e.tx;
-							ry = e.p0y - a * e.ty;
-							
-							dx0 = (rx - bot0x);
-							dy0 = (ry - bot0y);
-							
-							//a = bny * dx0 - bnx * dy0;
-							//na = 1.0; //std::sqrt(n0 * (dx0 * dx0 + dy0 * dy0)); // !
-							a = std::sqrt(dx0 * dx0 + dy0 * dy0);
-							na = 1.0; //std::sqrt(bot0x * bot0x + bot0y * bot0y);
-							
-							if((a / na) > REL_GEOM_EPS)
-							{
-								bot1x = rx; bot1y = ry;
-								c1B = cellB.neighbors[ie];
-								foundB = true;
-							}
-							
-							newCellB.edges.emplace_back(rx, ry, e.p1x, e.p1y);
-							newCellB.neighbors.push_back(cellB.neighbors[ie]);
-						}
-					}
-				}
-			}
-			
-			if(foundB)
-			{
-				newCellB.edges.emplace_back(bot0x, bot0y, bot1x, bot1y);
-				newCellB.neighbors.push_back(ip);
-				diagram[c0B] = std::move(newCellB);
-				
-				newCell.edges.emplace_back(bot0x, bot0y, bot1x, bot1y);
-				newCell.neighbors.push_back(c0B);
-				
-				reachedInitCell = c1B == c0;
-				c0B = c1B;
-				bot0x = bot1x;
-				bot0y = bot1y;
-			}
-			else
-			{
-				newCellB.edges.emplace_back(bot0x, bot0y, bny, -bnx, true);
-				newCellB.neighbors.push_back(ip);
-				diagram[c0B] = std::move(newCellB);
-				
-				newCell.edges.emplace_back(bot0x, bot0y, bny, -bnx, true);
-				newCell.neighbors.push_back(c0B);
-			}
-		}
-		
-		// FIN INCREMENTAL ALGO ////////////////////////////////////////////
-		////////////////////////////////////////////////////////////////////
-		////////////////////////////////////////////////////////////////////
-		
-		diagram.push_back(std::move(newCell));
 	}
 	
 	return diagram;
 }
 
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
 /*!
  \brief Writing edges into VTK file.
  \params pnts are the points coordinates in the graph.
- \params edges are the set of edges linking points in graph.
- */
+*/
 static void write(const std::vector<VCell>& diagram, const std::vector<float2>& pnts, const std::string& fileName, float HalfLineDistance = 2.0)
 {
 	std::ofstream ofs(fileName);
@@ -866,11 +548,14 @@ static void write(const std::vector<VCell>& diagram, const std::vector<float2>& 
 	ofs.close();
 }
 
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////
+
 /*!
  \brief Writing edges into VTK file.
  \params pnts are the points coordinates in the graph.
- \params edges are the set of edges linking points in graph.
- */
+*/
 static void writeDual(const std::vector<VCell>& diagram, const std::vector<float2>& pnts, const std::string& fileName)
 {
 	std::ofstream ofs(fileName);
@@ -910,26 +595,27 @@ static void writeDual(const std::vector<VCell>& diagram, const std::vector<float
 
 int main() {
 	
-	// const auto pnts = generateSquarePoints(500);
-	/*const std::vector<float2> pnts = {
+	//const auto pnts = generateSquarePoints(10);
+	const std::vector<float2> pnts = {
 		{0.0f, 0.0f},
 		{1.0f, 0.0f},
 		{0.0f, 1.0f},
 		{1.0f, -0.5f},
 		{1.0f, 0.25f},
 	};
+	
 	const auto diagram = makeDiagram(pnts);
 	write(diagram, pnts, "voronoi_dbg.vtk");
-	writeDual(diagram, pnts, "delaunay_dbg.vtk");*/
+	writeDual(diagram, pnts, "delaunay_dbg.vtk");
 	
-	for(size_t i = 0; i < 100; ++i)
+	/*for(size_t i = 0; i < 100; ++i)
 	{
 		const auto pnts = generateSquarePoints(50000);
 		// const auto pnts = generateSquarePoints(50);
 		const auto diagram = makeDiagram(pnts);
 		std::cout << i << std::endl;
 		//write(diagram, pnts, "VTK/voronoi_" + std::to_string(i) + ".vtk");
-	}
+	}*/
 	
 	return 0;
 }
